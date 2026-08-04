@@ -179,13 +179,80 @@ button:disabled {
 
 .results h2 {
   font-size: 1.1rem;
-  margin: 0 0 4px;
+  margin: 0 0 12px;
 }
 
-.results .meta {
+.summary-panel {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 18px 20px;
+  margin-bottom: 20px;
+}
+
+.summary-title {
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.summary-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.summary-value {
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.search-input {
+  flex: 0 1 320px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.search-clear {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.search-clear:hover {
+  color: var(--text);
+}
+
+.search-count {
   color: var(--text-muted);
   font-size: 0.85rem;
-  margin: 0 0 16px;
+  margin-left: auto;
 }
 
 .table-wrap {
@@ -193,13 +260,14 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--surface);
+  max-height: 70vh;
+  overflow-y: auto;
 }
 
 table {
   border-collapse: collapse;
   width: 100%;
   font-size: 0.85rem;
-  white-space: nowrap;
 }
 
 th,
@@ -207,6 +275,9 @@ td {
   padding: 8px 14px;
   text-align: left;
   border-bottom: 1px solid var(--border);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 th {
@@ -214,6 +285,32 @@ th {
   font-weight: 600;
   position: sticky;
   top: 0;
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+}
+
+.th-label {
+  display: inline-block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  vertical-align: middle;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.resize-handle:hover {
+  background: var(--accent);
+  opacity: 0.4;
 }
 
 tr:last-child td {
