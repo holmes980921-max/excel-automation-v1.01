@@ -8,13 +8,15 @@ persisted.
 """
 
 import base64
+import time
+from dataclasses import asdict
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from app.models.constants import FULL_OUTPUT_COLUMNS
-from app.models.schemas import ConvertResponse, ConvertTextRequest
+from app.models.schemas import ConversionSummaryModel, ConvertResponse, ConvertTextRequest
 from app.services.excel_transformer import ExcelTransformer
 from app.utils.excel_io import (
     InvalidExcelFormatError,
@@ -25,8 +27,6 @@ from app.utils.excel_io import (
 
 router = APIRouter(prefix="/api", tags=["excel"])
 
-PREVIEW_ROW_LIMIT = 50
-
 
 def _output_filename(original_filename: str | None) -> str:
     stem = "converted"
@@ -35,22 +35,26 @@ def _output_filename(original_filename: str | None) -> str:
     return f"{stem}_converted.xlsx"
 
 
-def _build_response(result_df: pd.DataFrame, filename: str) -> ConvertResponse:
+def _build_response(
+    transformer: ExcelTransformer, result_df: pd.DataFrame, filename: str, elapsed_seconds: float
+) -> ConvertResponse:
     if result_df.empty:
         raise HTTPException(
             status_code=400,
             detail="No TS# data found. Check that the input matches the expected PPID/Parameter/Value format.",
         )
 
+    summary = transformer.summarize(result_df, elapsed_seconds)
     output_bytes = dataframe_to_xlsx_bytes(result_df)
-    preview_df = result_df.head(PREVIEW_ROW_LIMIT).replace({np.nan: None})
+    rows_df = result_df.replace({np.nan: None})
 
     return ConvertResponse(
         filename=filename,
         columns=FULL_OUTPUT_COLUMNS,
-        preview=preview_df.to_dict(orient="records"),
+        rows=rows_df.to_dict(orient="records"),
         total_rows=len(result_df),
         file_base64=base64.b64encode(output_bytes).decode("ascii"),
+        summary=ConversionSummaryModel(**asdict(summary)),
     )
 
 
@@ -63,16 +67,19 @@ async def convert_excel(file: UploadFile = File(...)) -> ConvertResponse:
     if not file_bytes:
         raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+    transformer = ExcelTransformer()
+    start = time.perf_counter()
     try:
         raw_rows = read_raw_rows(file_bytes)
-        result_df = ExcelTransformer().transform(raw_rows)
+        result_df = transformer.transform(raw_rows)
     except InvalidExcelFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         # Nothing was written to disk, but drop the buffer reference promptly anyway.
         del file_bytes
+    elapsed = time.perf_counter() - start
 
-    return _build_response(result_df, _output_filename(file.filename))
+    return _build_response(transformer, result_df, _output_filename(file.filename), elapsed)
 
 
 @router.post("/convert-text", response_model=ConvertResponse)
@@ -80,10 +87,13 @@ async def convert_text(payload: ConvertTextRequest) -> ConvertResponse:
     if not payload.text or not payload.text.strip():
         raise HTTPException(status_code=400, detail="Pasted data is empty.")
 
+    transformer = ExcelTransformer()
+    start = time.perf_counter()
     try:
         raw_rows = parse_pasted_text(payload.text)
-        result_df = ExcelTransformer().transform(raw_rows)
+        result_df = transformer.transform(raw_rows)
     except InvalidExcelFormatError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    elapsed = time.perf_counter() - start
 
-    return _build_response(result_df, "pasted_converted.xlsx")
+    return _build_response(transformer, result_df, "pasted_converted.xlsx", elapsed)
