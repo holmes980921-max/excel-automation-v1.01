@@ -1,15 +1,25 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
+import PreviewTable from "@/components/PreviewTable";
+import ConversionSummaryPanel from "@/components/ConversionSummaryPanel";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+
+type ConversionSummary = {
+  ppid_count: number;
+  ts_count: number;
+  generated_rows: number;
+  conversion_time_seconds: number;
+};
 
 type ConvertResponse = {
   filename: string;
   columns: string[];
-  preview: Record<string, unknown>[];
+  rows: Record<string, unknown>[];
   total_rows: number;
   file_base64: string;
+  summary: ConversionSummary;
 };
 
 function base64ToBlob(base64: string): Blob {
@@ -119,7 +129,7 @@ export default function Home() {
 
   return (
     <main>
-      <h1>Excel Automation V1.01</h1>
+      <h1>Excel Automation V1.02</h1>
       <p className="subtitle">
         Upload a PPID / Parameter / Reference Value excel file to convert it into a flat,
         pivot-ready table (one row per TS#).
@@ -221,30 +231,9 @@ export default function Home() {
 
       {result && (
         <div className="results">
+          <ConversionSummaryPanel summary={result.summary} />
           <h2>Preview</h2>
-          <p className="meta">
-            Showing {result.preview.length} of {result.total_rows} converted rows
-          </p>
-          <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  {result.columns.map((col) => (
-                    <th key={col}>{col}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {result.preview.map((row, i) => (
-                  <tr key={i}>
-                    {result.columns.map((col) => (
-                      <td key={col}>{row[col] === null || row[col] === undefined ? "" : String(row[col])}</td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <PreviewTable columns={result.columns} rows={result.rows} />
         </div>
       )}
     </main>
