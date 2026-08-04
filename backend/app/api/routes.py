@@ -16,8 +16,15 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from app.models.constants import FULL_OUTPUT_COLUMNS
-from app.models.schemas import ConversionSummaryModel, ConvertResponse, ConvertTextRequest
+from app.models.schemas import (
+    ConversionSummaryModel,
+    ConvertResponse,
+    ConvertTextRequest,
+    ExportRequest,
+    ExportResponse,
+)
 from app.services.excel_transformer import ExcelTransformer
+from app.services import rule_manager
 from app.utils.excel_io import (
     InvalidExcelFormatError,
     dataframe_to_xlsx_bytes,
@@ -97,3 +104,30 @@ async def convert_text(payload: ConvertTextRequest) -> ConvertResponse:
     elapsed = time.perf_counter() - start
 
     return _build_response(transformer, result_df, "pasted_converted.xlsx", elapsed)
+
+
+@router.post("/export", response_model=ExportResponse)
+async def export_rows(payload: ExportRequest) -> ExportResponse:
+    """Re-export already-converted rows shaped by a TransformationRule.
+
+    Stateless: takes the rows the client already has (from a prior
+    /api/convert or /api/convert-text call) plus a rule, and produces a
+    freshly shaped .xlsx. No original file re-upload is ever needed just
+    because a rule changed.
+    """
+    if not payload.rows:
+        raise HTTPException(status_code=400, detail="No rows to export.")
+
+    df = pd.DataFrame(payload.rows, columns=FULL_OUTPUT_COLUMNS)
+    shaped = rule_manager.apply_rule(df, payload.rule)
+
+    if shaped.df.shape[1] == 0:
+        raise HTTPException(status_code=400, detail="The selected rule has no output columns.")
+
+    renamed_df = shaped.df.copy()
+    renamed_df.columns = shaped.headers
+
+    output_bytes = dataframe_to_xlsx_bytes(renamed_df)
+    filename = payload.filename if payload.filename.lower().endswith(".xlsx") else f"{payload.filename}.xlsx"
+
+    return ExportResponse(filename=filename, file_base64=base64.b64encode(output_bytes).decode("ascii"))
