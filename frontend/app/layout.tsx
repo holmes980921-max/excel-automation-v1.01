@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AppProviders from "@/components/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Excel Automation V1.01",
-  description: "Convert raw PPID/TS# excel data into a flat, pivot-ready table.",
+  title: "Excel Automation V1.03",
+  description: "Configurable Excel transformation tool with a rule editor and Excel-style preview grid.",
 };
 
 export default function RootLayout({
@@ -13,7 +14,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppProviders>{children}</AppProviders>
+      </body>
     </html>
   );
 }

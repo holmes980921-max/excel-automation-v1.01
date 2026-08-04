@@ -1,241 +1,209 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-import PreviewTable from "@/components/PreviewTable";
-import ConversionSummaryPanel from "@/components/ConversionSummaryPanel";
+import { useCallback, useEffect, useState } from "react";
+import { Box, Button, Typography } from "@mui/material";
+import { Upload } from "lucide-react";
+import { toast } from "sonner";
+
+import AppToolbar from "@/components/AppToolbar";
+import StatusBar from "@/components/StatusBar";
+import RuleEditor from "@/components/RuleEditor";
+import ExcelGrid from "@/components/ExcelGrid";
+import UploadDialog, { type ConvertResponse } from "@/components/UploadDialog";
+import {
+  DEFAULT_RULE,
+  type TransformationRule,
+  listRules,
+  getActiveRuleId,
+  setActiveRuleId as persistActiveRuleId,
+  getRuleById,
+  saveRule,
+  updateRule,
+  deleteRule,
+  normalizeForEditing,
+  resolveDisplayColumns,
+} from "@/lib/rules";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-
-type ConversionSummary = {
-  ppid_count: number;
-  ts_count: number;
-  generated_rows: number;
-  conversion_time_seconds: number;
-};
-
-type ConvertResponse = {
-  filename: string;
-  columns: string[];
-  rows: Record<string, unknown>[];
-  total_rows: number;
-  file_base64: string;
-  summary: ConversionSummary;
-};
 
 function base64ToBlob(base64: string): Blob {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   });
 }
 
-type Mode = "file" | "paste";
-
 export default function Home() {
-  const [mode, setMode] = useState<Mode>("file");
-  const [file, setFile] = useState<File | null>(null);
-  const [pastedText, setPastedText] = useState("");
-  const [dragActive, setDragActive] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ConvertResponse | null>(null);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [rules, setRules] = useState<TransformationRule[]>([DEFAULT_RULE]);
+  const [activeRuleId, setActiveRuleIdState] = useState(DEFAULT_RULE.id);
+  const [draft, setDraft] = useState<TransformationRule>(() => normalizeForEditing(DEFAULT_RULE));
 
-  const switchMode = useCallback((next: Mode) => {
-    setMode(next);
-    setResult(null);
-    setError(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(true);
+  const [searchValue, setSearchValue] = useState("");
+  const [filteredCount, setFilteredCount] = useState(0);
+  const [downloading, setDownloading] = useState(false);
+
+  // Load persisted rules only on the client, after mount (localStorage is unavailable
+  // during SSR) - avoids a hydration mismatch on first paint.
+  useEffect(() => {
+    const id = getActiveRuleId();
+    setRules(listRules());
+    setActiveRuleIdState(id);
+    setDraft(normalizeForEditing(getRuleById(id)));
   }, []);
 
-  const resetForNewFile = useCallback((f: File) => {
-    setFile(f);
-    setResult(null);
-    setError(null);
+  const refreshRules = useCallback(() => setRules(listRules()), []);
+
+  const handleSelectRule = useCallback((id: string) => {
+    setActiveRuleIdState(id);
+    persistActiveRuleId(id);
+    setDraft(normalizeForEditing(getRuleById(id)));
   }, []);
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      setDragActive(false);
-      const dropped = e.dataTransfer.files?.[0];
-      if (dropped) resetForNewFile(dropped);
-    },
-    [resetForNewFile]
-  );
+  const handleSaveAsNew = useCallback(() => {
+    const saved = saveRule({
+      rule_name: draft.rule_name || "Untitled Rule",
+      output_columns: draft.output_columns,
+      column_order: draft.column_order,
+      aliases: draft.aliases,
+    });
+    refreshRules();
+    setActiveRuleIdState(saved.id);
+    persistActiveRuleId(saved.id);
+    setDraft(normalizeForEditing(saved));
+    toast.success(`Saved rule "${saved.rule_name}"`);
+  }, [draft, refreshRules]);
 
-  const handleChoose = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const chosen = e.target.files?.[0];
-      if (chosen) resetForNewFile(chosen);
-    },
-    [resetForNewFile]
-  );
+  const handleUpdateCurrent = useCallback(() => {
+    if (activeRuleId === DEFAULT_RULE.id) return;
+    const updated = updateRule({ ...draft, id: activeRuleId });
+    refreshRules();
+    setDraft(normalizeForEditing(updated));
+    toast.success(`Updated rule "${updated.rule_name}"`);
+  }, [activeRuleId, draft, refreshRules]);
 
-  const handleConvert = useCallback(async () => {
-    if (mode === "file" && !file) return;
-    if (mode === "paste" && !pastedText.trim()) return;
+  const handleDeleteCurrent = useCallback(() => {
+    if (activeRuleId === DEFAULT_RULE.id) return;
+    const name = draft.rule_name;
+    deleteRule(activeRuleId);
+    refreshRules();
+    setActiveRuleIdState(DEFAULT_RULE.id);
+    persistActiveRuleId(DEFAULT_RULE.id);
+    setDraft(normalizeForEditing(DEFAULT_RULE));
+    toast.success(`Deleted rule "${name}"`);
+  }, [activeRuleId, draft.rule_name, refreshRules]);
 
-    setLoading(true);
-    setError(null);
-    setResult(null);
+  const handleResetToDefault = useCallback(() => {
+    setActiveRuleIdState(DEFAULT_RULE.id);
+    persistActiveRuleId(DEFAULT_RULE.id);
+    setDraft(normalizeForEditing(DEFAULT_RULE));
+    toast.success("Reset to Default");
+  }, []);
 
+  const handleDownload = useCallback(async () => {
+    if (!result) return;
+    setDownloading(true);
     try {
-      let res: Response;
-      if (mode === "file") {
-        const formData = new FormData();
-        formData.append("file", file as File);
-        res = await fetch(`${API_BASE}/api/convert`, {
-          method: "POST",
-          body: formData,
-        });
-      } else {
-        res = await fetch(`${API_BASE}/api/convert-text`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: pastedText }),
-        });
-      }
-
+      const res = await fetch(`${API_BASE}/api/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: result.filename, rows: result.rows, rule: draft }),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.detail ?? `Conversion failed (${res.status})`);
+        throw new Error(body?.detail ?? `Export failed (${res.status})`);
       }
-
-      const data: ConvertResponse = await res.json();
-      setResult(data);
+      const data = await res.json();
+      const blob = base64ToBlob(data.file_base64);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${data.filename}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unexpected error during conversion.");
+      toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
-      setLoading(false);
+      setDownloading(false);
     }
-  }, [mode, file, pastedText]);
+  }, [result, draft]);
 
-  const handleDownload = useCallback(() => {
-    if (!result) return;
-    const blob = base64ToBlob(result.file_base64);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = result.filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-  }, [result]);
+  const displayColumns = resolveDisplayColumns(draft);
 
   return (
-    <main>
-      <h1>Excel Automation V1.02</h1>
-      <p className="subtitle">
-        Upload a PPID / Parameter / Reference Value excel file to convert it into a flat,
-        pivot-ready table (one row per TS#).
-      </p>
+    <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw" }}>
+      <AppToolbar
+        onUploadClick={() => setUploadOpen(true)}
+        onDownloadClick={handleDownload}
+        downloadDisabled={!result || downloading}
+        rulesOpen={rulesOpen}
+        onToggleRules={() => setRulesOpen((v) => !v)}
+        searchValue={searchValue}
+        onSearchChange={setSearchValue}
+      />
 
-      <div className="tabs">
-        <button
-          type="button"
-          className={`tab${mode === "file" ? " active" : ""}`}
-          onClick={() => switchMode("file")}
-        >
-          파일 업로드
-        </button>
-        <button
-          type="button"
-          className={`tab${mode === "paste" ? " active" : ""}`}
-          onClick={() => switchMode("paste")}
-        >
-          붙여넣기
-        </button>
-      </div>
-
-      {mode === "file" ? (
-        <div
-          className={`dropzone${dragActive ? " active" : ""}`}
-          onClick={() => inputRef.current?.click()}
-          onDragOver={(e) => {
-            e.preventDefault();
-            setDragActive(true);
-          }}
-          onDragLeave={() => setDragActive(false)}
-          onDrop={handleDrop}
-        >
-          <p>
-            {file ? (
-              <>
-                Selected: <span className="filename">{file.name}</span>
-              </>
-            ) : (
-              "Drag & drop an .xlsx file here, or click to choose one"
-            )}
-          </p>
-          <button
-            type="button"
-            className="secondary"
-            onClick={(e) => {
-              e.stopPropagation();
-              inputRef.current?.click();
-            }}
-          >
-            Choose File
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".xlsx,.xlsm"
-            onChange={handleChoose}
-            style={{ display: "none" }}
-          />
-        </div>
-      ) : (
-        <div className="paste-area">
-          <p className="paste-hint">
-            엑셀에서 헤더 행(PPID | Parameter | REF...)을 포함해 영역을 선택한 뒤 Ctrl+A → Ctrl+C,
-            아래에 Ctrl+V로 붙여넣으세요.
-          </p>
-          <textarea
-            className="paste-textarea"
-            placeholder="여기에 붙여넣기 (Ctrl+V)"
-            value={pastedText}
-            onChange={(e) => {
-              setPastedText(e.target.value);
-              setResult(null);
-              setError(null);
-            }}
-            rows={10}
-          />
-        </div>
-      )}
-
-      <div className="actions">
-        <button
-          type="button"
-          className="primary"
-          disabled={(mode === "file" ? !file : !pastedText.trim()) || loading}
-          onClick={handleConvert}
-        >
-          {loading && <span className="spinner" />}
-          {loading ? "Converting..." : "Convert"}
-        </button>
-        {result && (
-          <button type="button" className="secondary" onClick={handleDownload}>
-            Download {result.filename}
-          </button>
+      <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
+        {rulesOpen && (
+          <Box sx={{ width: 340, flexShrink: 0, borderRight: "1px solid #e0e0e0", background: "#fff" }}>
+            <RuleEditor
+              draft={draft}
+              onDraftChange={setDraft}
+              rules={rules}
+              activeRuleId={activeRuleId}
+              onSelectRule={handleSelectRule}
+              onSaveAsNew={handleSaveAsNew}
+              onUpdateCurrent={handleUpdateCurrent}
+              onDeleteCurrent={handleDeleteCurrent}
+              onResetToDefault={handleResetToDefault}
+            />
+          </Box>
         )}
-      </div>
 
-      {error && <div className="error">{error}</div>}
+        <Box sx={{ flex: 1, minWidth: 0, p: 1.5, background: "#FDF8F0" }}>
+          {result ? (
+            <ExcelGrid
+              rows={result.rows}
+              rule={draft}
+              quickFilterText={searchValue}
+              onDisplayedRowCountChange={setFilteredCount}
+            />
+          ) : (
+            <Box
+              sx={{
+                height: "100%",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 2,
+                color: "text.secondary",
+              }}
+            >
+              <Typography variant="h6">No data yet</Typography>
+              <Typography variant="body2">Upload an excel file or paste data to get started.</Typography>
+              <Button variant="contained" startIcon={<Upload size={16} />} onClick={() => setUploadOpen(true)}>
+                Upload File
+              </Button>
+            </Box>
+          )}
+        </Box>
+      </Box>
 
-      {result && (
-        <div className="results">
-          <ConversionSummaryPanel summary={result.summary} />
-          <h2>Preview</h2>
-          <PreviewTable columns={result.columns} rows={result.rows} />
-        </div>
-      )}
-    </main>
+      <StatusBar
+        totalRows={result?.total_rows ?? 0}
+        columnCount={displayColumns.length}
+        filteredCount={result ? filteredCount : 0}
+        currentRuleName={draft.rule_name}
+        ppidCount={result?.summary.ppid_count}
+        conversionTimeSeconds={result?.summary.conversion_time_seconds}
+      />
+
+      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={setResult} />
+    </Box>
   );
 }
