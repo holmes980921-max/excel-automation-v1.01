@@ -1,0 +1,9 @@
+{
+  "rule_name": "Production",
+  "output_columns": ["PPID", "TS#", "CardName", "DataCombination", "DataFeedFoward"],
+  "column_order": ["PPID", "TS#", "CardName", "DataCombination", "DataFeedFoward"],
+  "aliases": {
+    "DataCombination": "Data Combo",
+    "DataFeedFoward": "Data Feed Forward"
+  }
+}

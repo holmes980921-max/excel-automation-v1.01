@@ -1,0 +1,26 @@
+{
+  "rule_name": "Default",
+  "output_columns": [
+    "PPID",
+    "TS#",
+    "CardName",
+    "FilmMaterial",
+    "CorrelationCard_1",
+    "CorrelationCard_2",
+    "CorrelationCard_3",
+    "DataCombination",
+    "DataFeedFoward"
+  ],
+  "column_order": [
+    "PPID",
+    "TS#",
+    "CardName",
+    "FilmMaterial",
+    "CorrelationCard_1",
+    "CorrelationCard_2",
+    "CorrelationCard_3",
+    "DataCombination",
+    "DataFeedFoward"
+  ],
+  "aliases": {}
+}

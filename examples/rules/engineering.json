@@ -1,0 +1,9 @@
+{
+  "rule_name": "Engineering",
+  "output_columns": ["PPID", "TS#", "FilmMaterial", "CardName"],
+  "column_order": ["PPID", "FilmMaterial", "CardName", "TS#"],
+  "aliases": {
+    "PPID": "Recipe Name",
+    "CardName": "Card"
+  }
+}
