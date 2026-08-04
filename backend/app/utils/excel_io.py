@@ -16,25 +16,55 @@ class InvalidExcelFormatError(ValueError):
 
 
 def read_raw_rows(file_bytes: bytes) -> list[tuple[Any, Any, Any]]:
-    """Read the first worksheet of an uploaded .xlsx and return the first
-    three columns (PPID, Parameter, Reference Value) as raw tuples.
+    """Read the first worksheet of an uploaded .xlsx and return the
+    (PPID, Parameter, Reference Value) columns as raw tuples.
 
-    The header row (row 1) is skipped by pandas automatically. Column
-    position is used rather than column name, since the header text
-    ("REF.xxx" in the spec example) is not guaranteed to be stable.
+    Production files may carry extra columns beyond the three that matter -
+    those are located by header name (falling back to the original V1.01
+    positional assumption when headers aren't recognizable) and everything
+    else is ignored.
     """
     try:
         df = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine="openpyxl")
     except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
         raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
 
-    if df.shape[1] < 3:
-        raise InvalidExcelFormatError(
-            f"Expected at least 3 columns (PPID, Parameter, Reference Value), got {df.shape[1]}"
-        )
+    ppid_col, parameter_col, value_col = _resolve_input_columns(df)
+    subset = df[[ppid_col, parameter_col, value_col]]
+    return list(subset.itertuples(index=False, name=None))
 
-    first_three = df.iloc[:, :3]
-    return list(first_three.itertuples(index=False, name=None))
+
+def _resolve_input_columns(df: pd.DataFrame) -> tuple[Any, Any, Any]:
+    """Locate the PPID / Parameter / Reference Value columns.
+
+    Preferred: match headers by name ("PPID", "Parameter", and a value
+    column whose header mentions "ref" or "value") so extra/reordered
+    columns in production exports don't break parsing.
+
+    Fallback: the first three columns, positionally - this is exactly the
+    V1.01 behavior, kept so files with non-standard or blank headers still
+    work unchanged.
+    """
+    columns = list(df.columns)
+    by_lower_name = {str(col).strip().lower(): col for col in columns}
+
+    ppid_col = by_lower_name.get("ppid")
+    parameter_col = by_lower_name.get("parameter")
+
+    if ppid_col is not None and parameter_col is not None:
+        remaining = [c for c in columns if c not in (ppid_col, parameter_col)]
+        value_col = next(
+            (c for c in remaining if "ref" in str(c).strip().lower() or "value" in str(c).strip().lower()),
+            remaining[0] if remaining else None,
+        )
+        if value_col is not None:
+            return ppid_col, parameter_col, value_col
+
+    if len(columns) < 3:
+        raise InvalidExcelFormatError(
+            f"Expected at least 3 columns (PPID, Parameter, Reference Value), got {len(columns)}"
+        )
+    return columns[0], columns[1], columns[2]
 
 
 def dataframe_to_xlsx_bytes(df: pd.DataFrame, sheet_name: str = "Converted") -> bytes:
