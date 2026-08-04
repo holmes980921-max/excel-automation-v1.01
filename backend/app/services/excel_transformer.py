@@ -13,6 +13,7 @@ OUTPUT_COLUMNS field filled in (missing fields become "-").
 """
 
 import re
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -23,10 +24,19 @@ from app.models.constants import (
     MAX_TS_NUMBER,
     MISSING_VALUE,
     OUTPUT_COLUMNS,
+    TS_LABEL_PREFIX,
 )
 
 # "TS#<n>_<field>" -> group(1) = n, group(2) = field name
 TS_PATTERN = re.compile(r"^TS#(\d+)_(.+)$")
+
+
+@dataclass(frozen=True)
+class ConversionSummary:
+    ppid_count: int
+    ts_count: int
+    generated_rows: int
+    conversion_time_seconds: float
 
 
 class ExcelTransformer:
@@ -35,6 +45,22 @@ class ExcelTransformer:
     def transform(self, rows: list[tuple[Any, Any, Any]]) -> pd.DataFrame:
         grouped = self._group_by_ppid_and_ts(rows)
         return self._to_dataframe(grouped)
+
+    def summarize(self, df: pd.DataFrame, conversion_time_seconds: float) -> ConversionSummary:
+        """Build the post-conversion summary shown in the UI.
+
+        TS Count and Generated Rows are the same number by construction
+        (exactly one output row per TS block) - both are reported since the
+        UI shows them as distinct, separately-labeled figures.
+        """
+        ppid_count = int(df["PPID"].nunique()) if not df.empty else 0
+        generated_rows = len(df)
+        return ConversionSummary(
+            ppid_count=ppid_count,
+            ts_count=generated_rows,
+            generated_rows=generated_rows,
+            conversion_time_seconds=round(conversion_time_seconds, 2),
+        )
 
     # -- internal -----------------------------------------------------
 
@@ -77,7 +103,7 @@ class ExcelTransformer:
         for ppid, ts_map in grouped.items():
             for ts_num in sorted(ts_map):
                 fields = ts_map[ts_num]
-                row: dict[str, Any] = {"PPID": ppid, "TS#": ts_num}
+                row: dict[str, Any] = {"PPID": ppid, "TS#": f"{TS_LABEL_PREFIX}{ts_num}"}
                 for col in OUTPUT_COLUMNS:
                     row[col] = fields.get(col, MISSING_VALUE)
                 output_rows.append(row)
