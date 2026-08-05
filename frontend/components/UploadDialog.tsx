@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useDropzone, type FileRejection } from "react-dropzone";
 import {
   Dialog,
   DialogTitle,
@@ -15,24 +15,16 @@ import {
   Typography,
   CircularProgress,
 } from "@mui/material";
+import { FileSpreadsheet, UploadCloud, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { convertFile, convertText, type ConvertResponse } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export type { ConvertResponse, ConversionSummary } from "@/lib/api";
 
-export type ConversionSummary = {
-  ppid_count: number;
-  ts_count: number;
-  generated_rows: number;
-  conversion_time_seconds: number;
-};
-
-export type ConvertResponse = {
-  filename: string;
-  columns: string[];
-  rows: Record<string, unknown>[];
-  total_rows: number;
-  file_base64: string;
-  summary: ConversionSummary;
+const ACCEPTED_TYPES = {
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+  "application/vnd.ms-excel.sheet.macroEnabled.12": [".xlsm"],
+  "application/vnd.ms-excel": [".xls"],
 };
 
 type Props = {
@@ -43,6 +35,17 @@ type Props = {
 
 type Mode = "file" | "paste";
 
+function describeRejection(rejection: FileRejection): string {
+  const code = rejection.errors[0]?.code;
+  if (code === "file-invalid-type") {
+    return `"${rejection.file.name}" isn't a supported file type. Please use .xls, .xlsx, or .xlsm.`;
+  }
+  if (code === "too-many-files") {
+    return "Please drop a single file at a time.";
+  }
+  return rejection.errors[0]?.message ?? `"${rejection.file.name}" could not be used.`;
+}
+
 export default function UploadDialog({ open, onClose, onConverted }: Props) {
   const [mode, setMode] = useState<Mode>("file");
   const [file, setFile] = useState<File | null>(null);
@@ -50,20 +53,21 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const onDrop = useCallback((accepted: File[]) => {
+  const onDrop = useCallback((accepted: File[], rejections: FileRejection[]) => {
+    if (rejections.length > 0) {
+      setError(describeRejection(rejections[0]));
+      return;
+    }
     if (accepted[0]) {
       setFile(accepted[0]);
       setError(null);
     }
   }, []);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone({
     onDrop,
     multiple: false,
-    accept: {
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-      "application/vnd.ms-excel.sheet.macroEnabled.12": [".xlsm"],
-    },
+    accept: ACCEPTED_TYPES,
   });
 
   const handleConvert = async () => {
@@ -73,26 +77,7 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
     setLoading(true);
     setError(null);
     try {
-      let res: Response;
-      if (mode === "file") {
-        const formData = new FormData();
-        formData.append("file", file as File);
-        res = await fetch(`${API_BASE}/api/convert`, { method: "POST", body: formData });
-      } else {
-        res = await fetch(`${API_BASE}/api/convert-text`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: pastedText }),
-        });
-      }
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.detail ?? `Conversion failed (${res.status})`);
-      }
-
-      const data: ConvertResponse = await res.json();
-      toast.success(`Converted ${data.summary.generated_rows} rows from ${data.summary.ppid_count} PPIDs`);
+      const data = mode === "file" ? await convertFile(file as File) : await convertText(pastedText);
       onConverted(data);
       setFile(null);
       setPastedText("");
@@ -108,6 +93,13 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
 
   const canConvert = mode === "file" ? !!file : !!pastedText.trim();
 
+  const dropzoneBorderColor = isDragReject ? "error.main" : isDragAccept ? "success.main" : "divider";
+  const dropzoneBackground = isDragReject
+    ? "rgba(211, 47, 47, 0.06)"
+    : isDragAccept
+      ? "rgba(46, 125, 50, 0.06)"
+      : "transparent";
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>Upload Data</DialogTitle>
@@ -122,17 +114,33 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
             {...getRootProps()}
             sx={{
               border: "2px dashed",
-              borderColor: isDragActive ? "primary.main" : "divider",
+              borderColor: dropzoneBorderColor,
               borderRadius: 2,
               p: 4,
               textAlign: "center",
               cursor: "pointer",
-              background: isDragActive ? "action.hover" : "transparent",
+              background: dropzoneBackground,
+              transition: "border-color 0.15s ease, background 0.15s ease",
             }}
           >
             <input {...getInputProps()} />
-            <Typography color="text.secondary">
-              {file ? <strong>{file.name}</strong> : "Drag & drop an .xlsx file here, or click to choose one"}
+            <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
+              {isDragReject ? (
+                <XCircle size={28} color="#d32f2f" />
+              ) : file ? (
+                <FileSpreadsheet size={28} color="#2e7d32" />
+              ) : (
+                <UploadCloud size={28} />
+              )}
+            </Box>
+            <Typography color={isDragReject ? "error" : "text.secondary"}>
+              {isDragReject
+                ? "This file type isn't supported"
+                : file
+                  ? <strong>{file.name}</strong>
+                  : isDragActive
+                    ? "Drop the file here"
+                    : "Drag & drop a .xls, .xlsx, or .xlsm file here, or click to choose one"}
             </Typography>
           </Box>
         ) : (
