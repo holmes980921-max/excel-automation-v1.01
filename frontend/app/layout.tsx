@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-appRouter";
 import AppProviders from "@/components/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Excel Automation V1.03",
+  title: "Excel Automation V1.04",
   description: "Configurable Excel transformation tool with a rule editor and Excel-style preview grid.",
 };
 
@@ -15,7 +16,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AppProviders>{children}</AppProviders>
+        {/* Ensures MUI's emotion styles are collected and injected during SSR
+            instead of only on the client - the root-cause fix for MUI+Next.js
+            App Router hydration mismatches/style-flash, not a workaround. */}
+        <AppRouterCacheProvider options={{ key: "mui" }}>
+          <AppProviders>{children}</AppProviders>
+        </AppRouterCacheProvider>
       </body>
     </html>
   );
