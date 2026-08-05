@@ -67,8 +67,8 @@ def _build_response(
 
 @router.post("/convert", response_model=ConvertResponse)
 async def convert_excel(file: UploadFile = File(...)) -> ConvertResponse:
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm")):
-        raise HTTPException(status_code=400, detail="Please upload a .xlsx file.")
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xls")):
+        raise HTTPException(status_code=400, detail="Please upload a .xls, .xlsx, or .xlsm file.")
 
     file_bytes = await file.read()
     if not file_bytes:

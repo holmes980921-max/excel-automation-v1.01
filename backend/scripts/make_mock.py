@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""Generate a production-like mock .xlsx for manual testing and regression tests.
+"""Generate a production-like mock excel file for manual testing and
+regression tests.
 
 Includes, on purpose:
   - Many PPIDs with a variable number of TS blocks (1..10) each, some with
@@ -10,7 +11,8 @@ Includes, on purpose:
     TS#11) that must be silently ignored (Feature 3).
 
 Usage:
-    python scripts/make_mock.py [output_path]
+    python scripts/make_mock.py [output_path]        # .xlsx (default)
+    python scripts/make_mock.py [output_path.xls]     # legacy .xls (needs xlwt - see requirements-dev.txt)
 """
 
 import random
@@ -38,18 +40,16 @@ def _make_ppid(n: int) -> str:
     return f"AB{n:06d}_1"
 
 
-def build_workbook(path: str, ppid_count: int = PPID_COUNT) -> tuple[int, int]:
+def _generate_rows(ppid_count: int = PPID_COUNT) -> tuple[list[list], int, int]:
+    """Builds the raw grid (list of rows) shared by both the .xlsx and
+    legacy .xls writers, so the two formats always contain identical data."""
     rng = random.Random(SEED)
-    wb = openpyxl.Workbook()
-    ws = wb.active
-
-    # Extra columns D/E ("Operator", "Comment") must be ignored by the converter.
-    ws.append(["PPID", "Parameter", "REF.xxx", "Operator", "Comment"])
+    rows: list[list] = [["PPID", "Parameter", "REF.xxx", "Operator", "Comment"]]
 
     total_ts = 0
     for i in range(1, ppid_count + 1):
         ppid = _make_ppid(i)
-        ws.append([ppid, "PPID", ppid, "op_a", "note"])
+        rows.append([ppid, "PPID", ppid, "op_a", "note"])
 
         ts_count = rng.randint(1, 10)
         for ts_num in range(1, ts_count + 1):
@@ -60,21 +60,57 @@ def build_workbook(path: str, ppid_count: int = PPID_COUNT) -> tuple[int, int]:
                     value = rng.randint(0, 100)
                 else:
                     value = f"{field}_val_{ppid}_{ts_num}"
-                ws.append([ppid, f"TS#{ts_num}_{field}", value, "op_a", "note"])
+                rows.append([ppid, f"TS#{ts_num}_{field}", value, "op_a", "note"])
 
             if rng.random() < 0.3:
                 unknown = rng.choice(UNKNOWN_PARAMETERS)
-                ws.append([ppid, unknown, "should_be_ignored", "op_a", "note"])
+                rows.append([ppid, unknown, "should_be_ignored", "op_a", "note"])
 
         if rng.random() < 0.1:
             # Out-of-range TS (max is TS#10) - must be ignored, not crash.
-            ws.append([ppid, "TS#11_CardName", "TOO_FAR", "op_a", "note"])
+            rows.append([ppid, "TS#11_CardName", "TOO_FAR", "op_a", "note"])
 
+    return rows, ppid_count, total_ts
+
+
+def build_workbook(path: str, ppid_count: int = PPID_COUNT) -> tuple[int, int]:
+    """Writes the modern .xlsx mock file."""
+    rows, n_ppid, n_ts = _generate_rows(ppid_count)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
     wb.save(path)
-    return ppid_count, total_ts
+    return n_ppid, n_ts
+
+
+def build_legacy_workbook(path: str, ppid_count: int = PPID_COUNT) -> tuple[int, int]:
+    """Writes the legacy .xls mock file (same data as build_workbook).
+
+    Requires xlwt, a dev-only dependency (see backend/requirements-dev.txt) -
+    the running app only ever *reads* .xls (via xlrd), never writes it.
+    """
+    try:
+        import xlwt
+    except ImportError as exc:
+        raise SystemExit(
+            "Generating a .xls mock requires xlwt: pip install -r requirements-dev.txt"
+        ) from exc
+
+    rows, n_ppid, n_ts = _generate_rows(ppid_count)
+    wb = xlwt.Workbook()
+    ws = wb.add_sheet("Sheet1")
+    for r, row in enumerate(rows):
+        for c, value in enumerate(row):
+            ws.write(r, c, value)
+    wb.save(path)
+    return n_ppid, n_ts
 
 
 if __name__ == "__main__":
     out_path = sys.argv[1] if len(sys.argv) > 1 else str(Path(__file__).parent / "mock_input.xlsx")
-    n_ppid, n_ts = build_workbook(out_path)
+    if out_path.lower().endswith(".xls"):
+        n_ppid, n_ts = build_legacy_workbook(out_path)
+    else:
+        n_ppid, n_ts = build_workbook(out_path)
     print(f"Generated {out_path}: {n_ppid} PPIDs, {n_ts} TS blocks (expected output rows)")

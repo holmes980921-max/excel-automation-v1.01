@@ -6,26 +6,54 @@ to disk, so there is nothing to clean up after a request completes.
 """
 
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
+
+# File signatures used to detect the real format, independent of filename
+# extension - a mislabeled or renamed file still gets read correctly, and a
+# file that is neither is rejected with a clear error before pandas ever
+# sees it.
+_ZIP_SIGNATURE = b"PK\x03\x04"  # .xlsx / .xlsm (OOXML is a zip archive)
+_OLE2_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy .xls (OLE2 compound file)
+
+ExcelEngine = Literal["openpyxl", "xlrd"]
 
 
 class InvalidExcelFormatError(ValueError):
     """Raised when the uploaded file cannot be parsed as the expected input."""
 
 
+def detect_excel_engine(file_bytes: bytes) -> ExcelEngine:
+    """Pick the right pandas engine by sniffing the file's actual bytes.
+
+    Trusting the filename extension isn't enough for "automatic format
+    detection" - a renamed or mislabeled file would silently pick the wrong
+    parser and fail confusingly. Reading the signature instead means legacy
+    .xls and modern .xlsx/.xlsm both "just work" regardless of extension.
+    """
+    if file_bytes.startswith(_ZIP_SIGNATURE):
+        return "openpyxl"
+    if file_bytes.startswith(_OLE2_SIGNATURE):
+        return "xlrd"
+    raise InvalidExcelFormatError(
+        "Unrecognized file format - only legacy .xls and modern .xlsx/.xlsm excel files are supported."
+    )
+
+
 def read_raw_rows(file_bytes: bytes) -> list[tuple[Any, Any, Any]]:
-    """Read the first worksheet of an uploaded .xlsx and return the
-    (PPID, Parameter, Reference Value) columns as raw tuples.
+    """Read the first worksheet of an uploaded excel file (.xls or .xlsx/
+    .xlsm, auto-detected) and return the (PPID, Parameter, Reference Value)
+    columns as raw tuples.
 
     Production files may carry extra columns beyond the three that matter -
     those are located by header name (falling back to the original V1.01
     positional assumption when headers aren't recognizable) and everything
     else is ignored.
     """
+    engine = detect_excel_engine(file_bytes)
     try:
-        df = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine="openpyxl")
+        df = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine=engine)
     except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
         raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
 

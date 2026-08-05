@@ -1,0 +1,3 @@
+# Only needed to generate legacy .xls mock fixtures (scripts/make_mock.py).
+# The running application never writes .xls, so this is not in requirements.txt.
+xlwt>=1.3.0

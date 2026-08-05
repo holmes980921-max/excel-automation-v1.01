@@ -3,6 +3,7 @@ backend/.venv/
 **/__pycache__/
 *.pyc
 backend/scripts/*.xlsx
+backend/scripts/*.xls
 
 # Node / Next.js
 frontend/node_modules/
