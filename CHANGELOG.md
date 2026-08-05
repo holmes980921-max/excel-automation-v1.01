@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.04 - Production Readiness Release
+
+### Added
+- Legacy `.xls` support alongside `.xlsx`/`.xlsm`, with automatic format detection from the
+  file's actual byte signature (ZIP vs. OLE2) rather than its filename extension -
+  `detect_excel_engine()` in `excel_io.py`. Output is always `.xlsx` regardless of input format.
+- One-click developer scripts: `run.ps1`/`run.bat` (environment validation, dependency install,
+  start both servers, wait for health), `update.ps1`/`update.bat` (git pull + reinstall),
+  `scripts/health-check.ps1` (standalone health check)
+- `backend/requirements-dev.txt` (`xlwt`) for generating `.xls` mock fixtures
+- `lib/api.ts` - centralized frontend API client (was previously duplicated between
+  `UploadDialog.tsx` and `page.tsx`)
+- Status-bar success feedback (`StatusBar`'s `statusMessage` prop) as the new home for
+  "converted", "saved", "updated", "deleted", "reset", "downloaded", "exported" confirmations
+- `@mui/material-nextjs` `AppRouterCacheProvider` for correct MUI/Next.js App Router SSR style
+  injection
+- Visual drag-accept/drag-reject states and friendly rejection messages in the upload dialog
+  (via `react-dropzone`'s `isDragAccept`/`isDragReject`/`fileRejections`)
+
+### Changed
+- Toast notifications (Sonner) are now reserved for errors/warnings only; moved to
+  `position="bottom-right"` so they can never cover the toolbar or search box
+- Preview grid: slightly larger row height/padding, a left accent bar on the selected row, and a
+  few CSS variable tweaks for readability (still the same warm beige palette introduced in V1.03)
+- `DndContext` in `RuleEditor` now has an explicit, stable `id` prop
+
+### Fixed
+- Next.js/MUI hydration warning, root-caused via proper SSR emotion-cache integration (not
+  suppressed)
+- `dnd-kit` SSR id-mismatch warning, root-caused via a stable `DndContext` id (not suppressed)
+
+### Backward Compatibility
+- `excel_transformer.py`, `rule_manager.py`, and `constants.py` are unchanged (byte-identical to
+  the `v1.03` tag)
+- `.xls` and `.xlsx` versions of the same data transform to byte-identical output, verified both
+  directly and through a live HTTP `/api/convert` call
+- All V1.01-V1.03 functionality (upload, paste, search, sort, resize, rule editor, conversion
+  summary) still works - V1.04 changes are quality/UX/DX improvements, not feature removals
+
+---
+
 ## v1.03 - Transformation Rule Editor
 
 ### Added
