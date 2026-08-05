@@ -49,6 +49,8 @@ type Props = {
   onUpdateCurrent: () => void;
   onDeleteCurrent: () => void;
   onResetToDefault: () => void;
+  /** Success feedback goes here (status bar), not a toast - toasts are for errors/warnings only. */
+  onStatusMessage: (message: string) => void;
 };
 
 function SortableRow({
@@ -114,6 +116,7 @@ export default function RuleEditor({
   onUpdateCurrent,
   onDeleteCurrent,
   onResetToDefault,
+  onStatusMessage,
 }: Props) {
   const [newRuleName, setNewRuleName] = useState("");
   const importInputRef = useRef<HTMLInputElement | null>(null);
@@ -152,7 +155,7 @@ export default function RuleEditor({
     a.download = `${draft.rule_name || "rule"}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(`Exported "${draft.rule_name}"`);
+    onStatusMessage(`Exported "${draft.rule_name}"`);
   };
 
   const handleImportFile = async (file: File) => {
@@ -160,7 +163,7 @@ export default function RuleEditor({
       const text = await file.text();
       const imported = importRuleFromJson(text);
       onDraftChange({ ...draft, ...imported });
-      toast.success(`Imported "${imported.rule_name}" - review and Save to keep it`);
+      onStatusMessage(`Imported "${imported.rule_name}" - review and Save to keep it`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Invalid rule JSON");
     }
@@ -202,7 +205,12 @@ export default function RuleEditor({
         Drag to reorder · check to include · edit to alias
       </Typography>
 
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        id="rule-editor-column-order"
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
         <SortableContext items={draft.column_order} strategy={verticalListSortingStrategy}>
           <Stack spacing={0}>
             {draft.column_order.map((field) => (

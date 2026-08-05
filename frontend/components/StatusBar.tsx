@@ -1,6 +1,7 @@
 "use client";
 
-import { Box, Stack, Typography, Divider } from "@mui/material";
+import { Box, Stack, Typography, Divider, Fade } from "@mui/material";
+import { CheckCircle2 } from "lucide-react";
 
 type Props = {
   totalRows: number;
@@ -9,6 +10,9 @@ type Props = {
   currentRuleName: string;
   ppidCount?: number;
   conversionTimeSeconds?: number;
+  /** Transient success feedback (e.g. "Saved rule ..."). Errors/warnings use
+   * toasts instead - see AppProviders' <Toaster />. */
+  statusMessage?: string | null;
 };
 
 function Stat({ label, value }: { label: string; value: string | number }) {
@@ -26,6 +30,7 @@ export default function StatusBar({
   currentRuleName,
   ppidCount,
   conversionTimeSeconds,
+  statusMessage,
 }: Props) {
   return (
     <Box
@@ -36,6 +41,7 @@ export default function StatusBar({
         py: 0.5,
         display: "flex",
         alignItems: "center",
+        minHeight: 28,
       }}
     >
       <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />}>
@@ -48,6 +54,13 @@ export default function StatusBar({
           <Stat label="Conversion Time" value={`${conversionTimeSeconds.toFixed(2)} sec`} />
         )}
       </Stack>
+
+      <Fade in={!!statusMessage} unmountOnExit>
+        <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 0.5, color: "success.main" }}>
+          <CheckCircle2 size={14} />
+          <Typography variant="caption">{statusMessage}</Typography>
+        </Box>
+      </Fade>
     </Box>
   );
 }

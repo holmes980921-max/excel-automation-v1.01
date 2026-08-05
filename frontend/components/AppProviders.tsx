@@ -20,7 +20,9 @@ export default function AppProviders({ children }: { children: React.ReactNode }
     <ThemeProvider theme={theme}>
       <CssBaseline />
       {children}
-      <Toaster richColors position="top-right" />
+      {/* Bottom-right, and only ever used for errors/warnings (see StatusBar for
+          success feedback) - guarantees the toolbar and search box are never covered. */}
+      <Toaster richColors position="bottom-right" />
     </ThemeProvider>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Box, Button, Typography } from "@mui/material";
 import { Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -10,6 +10,7 @@ import StatusBar from "@/components/StatusBar";
 import RuleEditor from "@/components/RuleEditor";
 import ExcelGrid from "@/components/ExcelGrid";
 import UploadDialog, { type ConvertResponse } from "@/components/UploadDialog";
+import { exportRows, downloadBase64File } from "@/lib/api";
 import {
   DEFAULT_RULE,
   type TransformationRule,
@@ -24,16 +25,7 @@ import {
   resolveDisplayColumns,
 } from "@/lib/rules";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-
-function base64ToBlob(base64: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], {
-    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  });
-}
+const STATUS_MESSAGE_DURATION_MS = 4000;
 
 export default function Home() {
   const [result, setResult] = useState<ConvertResponse | null>(null);
@@ -46,6 +38,20 @@ export default function Home() {
   const [searchValue, setSearchValue] = useState("");
   const [filteredCount, setFilteredCount] = useState(0);
   const [downloading, setDownloading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const statusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Success feedback goes in the status bar, not a toast, so it never covers
+  // the toolbar/search - toasts are reserved for errors and warnings.
+  const showStatusMessage = useCallback((message: string) => {
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    setStatusMessage(message);
+    statusTimeoutRef.current = setTimeout(() => setStatusMessage(null), STATUS_MESSAGE_DURATION_MS);
+  }, []);
+
+  useEffect(() => () => {
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+  }, []);
 
   // Load persisted rules only on the client, after mount (localStorage is unavailable
   // during SSR) - avoids a hydration mismatch on first paint.
@@ -57,6 +63,14 @@ export default function Home() {
   }, []);
 
   const refreshRules = useCallback(() => setRules(listRules()), []);
+
+  const handleConverted = useCallback(
+    (data: ConvertResponse) => {
+      setResult(data);
+      showStatusMessage(`Converted ${data.summary.generated_rows} rows from ${data.summary.ppid_count} PPIDs`);
+    },
+    [showStatusMessage]
+  );
 
   const handleSelectRule = useCallback((id: string) => {
     setActiveRuleIdState(id);
@@ -75,16 +89,16 @@ export default function Home() {
     setActiveRuleIdState(saved.id);
     persistActiveRuleId(saved.id);
     setDraft(normalizeForEditing(saved));
-    toast.success(`Saved rule "${saved.rule_name}"`);
-  }, [draft, refreshRules]);
+    showStatusMessage(`Saved rule "${saved.rule_name}"`);
+  }, [draft, refreshRules, showStatusMessage]);
 
   const handleUpdateCurrent = useCallback(() => {
     if (activeRuleId === DEFAULT_RULE.id) return;
     const updated = updateRule({ ...draft, id: activeRuleId });
     refreshRules();
     setDraft(normalizeForEditing(updated));
-    toast.success(`Updated rule "${updated.rule_name}"`);
-  }, [activeRuleId, draft, refreshRules]);
+    showStatusMessage(`Updated rule "${updated.rule_name}"`);
+  }, [activeRuleId, draft, refreshRules, showStatusMessage]);
 
   const handleDeleteCurrent = useCallback(() => {
     if (activeRuleId === DEFAULT_RULE.id) return;
@@ -94,44 +108,30 @@ export default function Home() {
     setActiveRuleIdState(DEFAULT_RULE.id);
     persistActiveRuleId(DEFAULT_RULE.id);
     setDraft(normalizeForEditing(DEFAULT_RULE));
-    toast.success(`Deleted rule "${name}"`);
-  }, [activeRuleId, draft.rule_name, refreshRules]);
+    showStatusMessage(`Deleted rule "${name}"`);
+  }, [activeRuleId, draft.rule_name, refreshRules, showStatusMessage]);
 
   const handleResetToDefault = useCallback(() => {
     setActiveRuleIdState(DEFAULT_RULE.id);
     persistActiveRuleId(DEFAULT_RULE.id);
     setDraft(normalizeForEditing(DEFAULT_RULE));
-    toast.success("Reset to Default");
-  }, []);
+    showStatusMessage("Reset to Default");
+  }, [showStatusMessage]);
 
   const handleDownload = useCallback(async () => {
     if (!result) return;
     setDownloading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/export`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ filename: result.filename, rows: result.rows, rule: draft }),
-      });
-      if (!res.ok) {
-        const body = await res.json().catch(() => null);
-        throw new Error(body?.detail ?? `Export failed (${res.status})`);
-      }
-      const data = await res.json();
-      const blob = base64ToBlob(data.file_base64);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = data.filename;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${data.filename}`);
+      const data = await exportRows(result.filename, result.rows, draft);
+      downloadBase64File(data.filename, data.file_base64);
+      showStatusMessage(`Downloaded ${data.filename}`);
     } catch (err) {
+      // Errors stay as toasts - they need to interrupt and be acknowledged.
       toast.error(err instanceof Error ? err.message : "Export failed");
     } finally {
       setDownloading(false);
     }
-  }, [result, draft]);
+  }, [result, draft, showStatusMessage]);
 
   const displayColumns = resolveDisplayColumns(draft);
 
@@ -160,6 +160,7 @@ export default function Home() {
               onUpdateCurrent={handleUpdateCurrent}
               onDeleteCurrent={handleDeleteCurrent}
               onResetToDefault={handleResetToDefault}
+              onStatusMessage={showStatusMessage}
             />
           </Box>
         )}
@@ -201,9 +202,10 @@ export default function Home() {
         currentRuleName={draft.rule_name}
         ppidCount={result?.summary.ppid_count}
         conversionTimeSeconds={result?.summary.conversion_time_seconds}
+        statusMessage={statusMessage}
       />
 
-      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={setResult} />
+      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleConverted} />
     </Box>
   );
 }
