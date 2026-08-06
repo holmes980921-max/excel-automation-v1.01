@@ -131,3 +131,103 @@ def test_export_handles_odd_rules_gracefully(rule_payload):
              "DataCombination": "-", "DataFeedFoward": "-"}]
     res = client.post("/api/export", json={"filename": "out.xlsx", "rows": rows, "rule": rule_payload})
     assert res.status_code == 200
+
+
+def _description_xlsx_tuple(rows: list[list], filename: str = "desc.xlsx"):
+    buf = BytesIO()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    for row in rows:
+        ws.append(row)
+    wb.save(buf)
+    return ("file", (filename, BytesIO(buf.getvalue()), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+
+
+_CONVERTED_ROWS = [
+    {"PPID": "AB000010_1", "TS#": "TS#1", "CardName": "CARD1", "FilmMaterial": "-",
+     "CorrelationCard_1": "-", "CorrelationCard_2": "-", "CorrelationCard_3": "-",
+     "DataCombination": "-", "DataFeedFoward": "-"},
+    {"PPID": "AB000020_1", "TS#": "TS#1", "CardName": "CARDX", "FilmMaterial": "-",
+     "CorrelationCard_1": "-", "CorrelationCard_2": "-", "CorrelationCard_3": "-",
+     "DataCombination": "-", "DataFeedFoward": "-"},
+]
+
+
+def test_export_includes_desc_when_present():
+    rows = [{**_CONVERTED_ROWS[0], "DESC": "First PPID"}]
+    res = client.post("/api/export", json={"filename": "out.xlsx", "rows": rows, "rule": None})
+    assert res.status_code == 200
+    xlsx_bytes = base64.b64decode(res.json()["file_base64"])
+    wb = openpyxl.load_workbook(BytesIO(xlsx_bytes))
+    ws = wb.active
+    header = next(ws.iter_rows(values_only=True))
+    assert "DESC" in header
+
+
+def test_add_description_success():
+    import json
+
+    desc_file = _description_xlsx_tuple([["PPID", "DESC"], ["AB000010_1", "First PPID"], ["AB000020_1", "Second PPID"]])
+    res = client.post(
+        "/api/add-description",
+        files=[desc_file],
+        data={"rows": json.dumps(_CONVERTED_ROWS)},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["matched_count"] == 2
+    assert data["unmatched_count"] == 0
+    assert all(row["DESC"] for row in data["rows"])
+
+
+def test_add_description_reports_unmatched():
+    import json
+
+    desc_file = _description_xlsx_tuple([["PPID", "DESC"], ["AB000010_1", "First PPID"]])
+    res = client.post(
+        "/api/add-description",
+        files=[desc_file],
+        data={"rows": json.dumps(_CONVERTED_ROWS)},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["matched_count"] == 1
+    assert data["unmatched_count"] == 1
+    assert data["unmatched_ppids"] == ["AB000020_1"]
+
+
+def test_add_description_rejects_duplicate_ppid():
+    import json
+
+    desc_file = _description_xlsx_tuple([["PPID", "DESC"], ["AB000010_1", "A"], ["AB000010_1", "B"]])
+    res = client.post(
+        "/api/add-description",
+        files=[desc_file],
+        data={"rows": json.dumps(_CONVERTED_ROWS)},
+    )
+    assert res.status_code == 400
+    assert "duplicate" in res.json()["detail"].lower()
+
+
+def test_add_description_rejects_missing_desc_column():
+    import json
+
+    desc_file = _description_xlsx_tuple([["PPID", "Notes"], ["AB000010_1", "irrelevant"]])
+    res = client.post(
+        "/api/add-description",
+        files=[desc_file],
+        data={"rows": json.dumps(_CONVERTED_ROWS)},
+    )
+    assert res.status_code == 400
+
+
+def test_add_description_rejects_empty_rows():
+    import json
+
+    desc_file = _description_xlsx_tuple([["PPID", "DESC"], ["AB000010_1", "A"]])
+    res = client.post(
+        "/api/add-description",
+        files=[desc_file],
+        data={"rows": json.dumps([])},
+    )
+    assert res.status_code == 400
