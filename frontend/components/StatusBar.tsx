@@ -1,7 +1,7 @@
 "use client";
 
-import { Box, Stack, Typography, Divider, Fade } from "@mui/material";
-import { CheckCircle2 } from "lucide-react";
+import { Box, Stack, Typography, Divider } from "@mui/material";
+import { CheckCircle2, Circle } from "lucide-react";
 
 type Props = {
   totalRows: number;
@@ -55,12 +55,22 @@ export default function StatusBar({
         )}
       </Stack>
 
-      <Fade in={!!statusMessage} unmountOnExit>
-        <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 0.5, color: "success.main" }}>
-          <CheckCircle2 size={14} />
-          <Typography variant="caption">{statusMessage}</Typography>
-        </Box>
-      </Fade>
+      {/* Always shows something here: the transient success message while
+       * one is active, otherwise a neutral "Ready" idle state - so the bar
+       * visibly settles rather than going blank (which read as stuck/frozen). */}
+      <Box
+        sx={{
+          ml: "auto",
+          display: "flex",
+          alignItems: "center",
+          gap: 0.5,
+          color: statusMessage ? "success.main" : "text.disabled",
+          transition: "color 0.2s ease",
+        }}
+      >
+        {statusMessage ? <CheckCircle2 size={14} /> : <Circle size={8} fill="currentColor" />}
+        <Typography variant="caption">{statusMessage ?? "Ready"}</Typography>
+      </Box>
     </Box>
   );
 }
