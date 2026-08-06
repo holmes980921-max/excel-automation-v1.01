@@ -15,22 +15,53 @@ body > div {
   height: 100%;
 }
 
-/* --- Excel-style AG Grid theme: warm business palette --- */
+/* --- Excel-style AG Grid theme: warm business palette ---
+ * The bundled "legacy" ag-theme-quartz.css (v36) only wires up a handful of
+ * --ag-* custom properties (header/background/border colors); it defines
+ * NO CSS rules at all for .ag-row-odd/.ag-row-even/.ag-row-hover/
+ * .ag-row-selected (verified by grepping the shipped stylesheet - those
+ * selectors simply don't appear in it). Setting --ag-odd-row-background-color
+ * etc. therefore has no visible effect. AG Grid's JS does still add those
+ * four classes to each row (driven by data row index, not DOM position, so
+ * it stays correct under virtualization/scrolling) - so row striping, hover,
+ * and selection are implemented here as plain CSS rules against AG Grid's
+ * own row classes instead of relying on theme variables that this theme
+ * build never reads. */
 .excel-grid {
   --ag-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --ag-header-background-color: #f5f5f5;
   --ag-header-foreground-color: #333333;
   --ag-header-column-separator-color: #e5ded0;
   --ag-background-color: #fdf8f0;
-  --ag-odd-row-background-color: #ffffff;
-  --ag-row-hover-color: #eaf4ff;
-  --ag-selected-row-background-color: #d6ebff;
   --ag-border-color: #e5ded0;
   --ag-row-border-color: #ece4d3;
   --ag-font-size: 13px;
   --ag-cell-horizontal-padding: 14px;
   --ag-row-height: 34px;
   --ag-header-height: 38px;
+}
+
+.excel-grid .ag-row {
+  transition: background-color 0.1s ease;
+}
+
+/* Zebra striping: alternating white / very light beige. */
+.excel-grid .ag-row-even {
+  background-color: #ffffff;
+}
+.excel-grid .ag-row-odd {
+  background-color: #fdf8f0;
+}
+
+/* Row hover highlight - sits above striping in the cascade (same
+ * specificity, declared later) so it's visible regardless of parity. */
+.excel-grid .ag-row-hover {
+  background-color: #eaf4ff;
+}
+
+/* Selected row highlight - takes priority over both hover and striping. */
+.excel-grid .ag-row-selected {
+  background-color: #d6ebff;
 }
 
 /* Left accent bar on the selected row - a clearer, more "reviewable" cue
@@ -43,10 +74,6 @@ body > div {
   bottom: 0;
   width: 3px;
   background: #2563eb;
-}
-
-.excel-grid .ag-row {
-  transition: background-color 0.1s ease;
 }
 
 .excel-grid .row-number-cell {
