@@ -5,7 +5,8 @@ Value excel export into a flat table - one row per `TS#` block - and lets you cu
 columns appear, in what order, and under what display name, entirely through the UI (no code
 changes required).
 
-**Current version: V1.04.1**
+**Current version: V1.05** (see the in-app **About** dialog, under the Settings menu, for the
+live version/build info - the header intentionally no longer hardcodes a version string)
 
 ## Quick Start (Windows)
 
@@ -44,6 +45,29 @@ manual setup required. See [Developer Experience](#developer-experience) below f
 - **Excel-style preview grid** - built on AG Grid: sticky header, pinned first column,
   resizable/movable columns, virtual scrolling, natural sort, row numbers.
 
+### Performance, Reliability & Observability (V1.05)
+- **~8.6x faster at enterprise scale** - a 300,000-row excel file now converts in ~1.8s instead
+  of ~15s. Driven by adopting `python-calamine` (Rust-based) as the default reader - validated
+  byte-and-type-identical to the previous engines before being adopted, with an automatic
+  fallback for anything outside that validation - and by no longer writing an unused xlsx file on
+  every conversion (downloads go through a separate, on-demand endpoint). Full numbers and
+  methodology: [PERFORMANCE_BENCHMARK_V1.05.md](./PERFORMANCE_BENCHMARK_V1.05.md).
+- **Processing overlay** - shown immediately on Convert, with a stage indicator (Reading Excel →
+  Parsing Workbook → Applying Transformation Rules → Generating Output → Preparing Preview), an
+  indeterminate progress bar, and a rough time estimate. Upload/Convert are disabled and the
+  dialog can't be dismissed mid-request, so a duplicate conversion can't be started by accident.
+- **Stronger reliability** - a 250 MB upload size cap (closes an unbounded-memory risk), broader
+  exception handling with user-friendly messages on every endpoint, and a global fallback handler
+  so an unexpected error never leaks a raw traceback to the client.
+- **Structured logging** (Application/Error/Performance/Debug categories) and an optional
+  **Debug Mode** (Settings menu, off by default) that adds per-stage timing, peak memory, and
+  which read engine was used to both the Status Bar and the raw API response.
+- **Simplified default UI** - the Transformation Rule Editor now lives behind **Settings → Show
+  Advanced Features** (off by default) rather than always being visible; the toolbar no longer
+  hardcodes a version string; an **About** dialog (Settings menu) shows app/version/build info.
+- **Real automated test suites** - `pytest` (backend, 88% line coverage) and `Vitest` (frontend).
+  See [TEST_COVERAGE_V1.05.md](./TEST_COVERAGE_V1.05.md).
+
 ### Production Readiness (V1.04)
 - **.xls and .xlsx (and .xlsm)** - both legacy and modern excel formats are accepted. The real
   format is auto-detected from the file's contents (not the filename extension), so a mislabeled
@@ -69,8 +93,43 @@ manual setup required. See [Developer Experience](#developer-experience) below f
 
 All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra tooling to install.
 
+### Running the test suites
+
+```bash
+# Backend (pytest, 37 tests)
+cd backend
+./.venv/Scripts/pip install -r requirements-dev.txt
+./.venv/Scripts/python.exe -m pytest                              # or: pytest --cov=app --cov-report=term-missing
+
+# Frontend (Vitest, 25 tests)
+cd frontend
+npm test                                                            # or: npx vitest run --coverage
+```
+
+### Debug Mode
+
+Toggle **Settings → Debug Mode** in the toolbar (off by default) to see per-stage timing, peak
+memory, and which excel-reading engine was used, both in the Status Bar after a conversion and in
+the raw API response (`?debug=true` on `/api/convert`/`/api/convert-text`).
+
+### Running a performance benchmark
+
+```bash
+cd backend
+# make_mock.py's PPID_COUNT constant defaults to 150; edit it (or pass a
+# larger ppid_count to build_workbook() directly) to generate a bigger file
+./.venv/Scripts/python.exe scripts/make_mock.py scripts/bench_300k.xlsx
+./.venv/Scripts/python.exe scripts/benchmark.py scripts/bench_300k.xlsx --label my_run
+```
+
+Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`. See
+[PERFORMANCE_BENCHMARK_V1.05.md](./PERFORMANCE_BENCHMARK_V1.05.md) for the V1.04-vs-V1.05 results.
+
 ## Rule Editor Guide
 
+0. The Rule Editor is hidden by default (V1.05 simplifies the everyday UI). Open the **Settings**
+   menu (top-right) and turn on **Show Advanced Features** to reveal the **Transformation Rules**
+   toolbar button - nothing about the feature itself changed, it's just not shown until asked for.
 1. Click **Transformation Rules** in the toolbar to open/close the rule panel (open by default).
 2. Pick a rule from the dropdown at the top of the panel, or start from **Default**.
 3. For each of the 9 columns: check/uncheck to include/exclude, drag the handle (⋮⋮) to reorder,
@@ -173,6 +232,14 @@ This was root-caused and fixed in V1.04 (MUI's `AppRouterCacheProvider` + a stab
 id). If you still see one, please report it with the exact message - it would indicate a
 regression, not an expected/ignorable warning.
 
+**Upload says "File is too large."**
+Files over 250 MB are rejected before any parsing is attempted (V1.05 reliability hardening,
+prevents an unbounded-memory request). This app's target scale is ~300k rows, which is typically
+well under this limit - if you're hitting it, double check the file is what you think it is.
+
+**I can't find the Transformation Rules button.**
+It's hidden by default in V1.05 - see step 0 of the [Rule Editor Guide](#rule-editor-guide).
+
 ## Folder structure
 
 ```
@@ -181,22 +248,29 @@ excel-automation-v1.01/
 ├── update.ps1 / update.bat   # One-click update (git pull + reinstall)
 ├── scripts/health-check.ps1  # Standalone health check
 ├── examples/rules/           # Example rule JSON files
+├── PERFORMANCE_BENCHMARK_V1.05.md  # V1.04 vs V1.05 methodology + results
+├── TEST_COVERAGE_V1.05.md          # Backend/frontend coverage breakdown
+├── CODE_REVIEW_V1.05.md            # Architecture/performance/reliability/... review + score
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                    # FastAPI app entry, CORS
-│   │   ├── api/routes.py              # HTTP layer only - calls into services/
+│   │   ├── main.py                    # FastAPI app entry, CORS, logging setup, global exception handler
+│   │   ├── api/routes.py              # HTTP layer only - calls into services/; upload size limit, Debug Mode
 │   │   ├── services/
 │   │   │   ├── excel_transformer.py   # Core conversion logic (unchanged since V1.02) + summary stats
 │   │   │   └── rule_manager.py        # Validates/applies a TransformationRule (column select/order/alias)
 │   │   ├── models/
 │   │   │   ├── constants.py           # OUTPUT_COLUMNS etc. - the fixed internal column set
-│   │   │   └── schemas.py             # Pydantic request/response models incl. TransformationRule
+│   │   │   └── schemas.py             # Pydantic request/response models incl. TransformationRule, DebugInfo
 │   │   └── utils/
-│   │       └── excel_io.py            # In-memory excel read/write; .xls/.xlsx auto-detection, column resolution
-│   ├── scripts/make_mock.py           # Production-like mock data generator (.xlsx and .xls)
-│   ├── tests/                         # pytest suite (run: pytest, from backend/)
+│   │       ├── excel_io.py            # In-memory excel read/write; calamine-first w/ openpyxl/xlrd fallback
+│   │       ├── logging_config.py      # Structured (Application/Error/Performance/Debug) logging setup
+│   │       └── perf.py                # PeakMemorySampler - shared by Debug Mode and the benchmark script
+│   ├── scripts/
+│   │   ├── make_mock.py               # Production-like mock data generator (.xlsx and .xls)
+│   │   └── benchmark.py               # Performance benchmark harness (timing + peak memory + throughput)
+│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 37 tests, 88% coverage
 │   ├── requirements.txt
-│   └── requirements-dev.txt           # xlwt (mock .xls fixtures) + pytest
+│   └── requirements-dev.txt           # xlwt (mock .xls fixtures), pytest, pytest-cov, httpx (TestClient)
 └── frontend/
     ├── app/
     │   ├── page.tsx                   # Toolbar / split view (Rule Editor + Grid) / status bar
@@ -204,15 +278,20 @@ excel-automation-v1.01/
     │   └── globals.css
     ├── components/
     │   ├── AppProviders.tsx           # MUI theme + Sonner toaster (errors/warnings only)
-    │   ├── AppToolbar.tsx             # Upload / Download / Transformation Rules / Search
-    │   ├── StatusBar.tsx              # Rows / Columns / Filtered / Current Rule + success feedback
+    │   ├── AppToolbar.tsx             # Upload / Download / Search / Settings menu (Advanced, Debug, About)
+    │   ├── StatusBar.tsx              # Rows/Columns/Filtered/Rule + completion feedback + Debug metrics
+    │   ├── ProcessingOverlay.tsx      # Shown on Convert: stage text, indeterminate progress, ETA
+    │   ├── AboutDialog.tsx            # App name/version/git tag/build date/backend+frontend framework
     │   ├── UploadDialog.tsx           # File (react-dropzone, .xls/.xlsx/.xlsm) or paste input
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
     │   └── ExcelGrid.tsx              # AG Grid preview, shaped live by the active rule
-    └── lib/
-        ├── api.ts                     # Centralized backend API client (single source for fetch calls)
-        ├── naturalCompare.ts          # Shared natural-sort comparator (used by AG Grid column sort)
-        └── rules.ts                   # TransformationRule type, localStorage persistence, shaping helpers
+    ├── lib/
+    │   ├── api.ts                     # Centralized backend API client (single source for fetch calls)
+    │   ├── naturalCompare.ts          # Shared natural-sort comparator (used by AG Grid column sort)
+    │   ├── rules.ts                   # TransformationRule type, localStorage persistence, shaping helpers
+    │   ├── uploadValidation.ts        # Pure file-rejection-message logic (extracted for testability)
+    │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE for the About dialog
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 25 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -234,24 +313,34 @@ concerns independent and separately testable.
 - **V1.04.1** - Patch: fixed `.xls` files that are actually HTML tables (a common ERP/MES export
   pattern) being rejected outright; fixed zebra striping/row hover/selected highlighting not
   rendering (the AG Grid theme never wired them up); Status Bar now shows an idle "Ready" state;
-  added a real `pytest` suite under `backend/tests/`. See [CHANGELOG.md](./CHANGELOG.md).
+  added a real `pytest` suite under `backend/tests/`.
+- **V1.05** - Performance, reliability, and observability: ~8.6x faster at 300k-row scale
+  (calamine reader + eliminated a wasted xlsx write), a Processing Overlay with stages/progress/
+  ETA, a 250 MB upload cap, structured logging + optional Debug Mode, `pytest`/`Vitest` test
+  suites, and a simplified default UI (Rule Editor moved behind Settings → Advanced, About
+  dialog, no hardcoded version). See [CODE_REVIEW_V1.05.md](./CODE_REVIEW_V1.05.md),
+  [PERFORMANCE_BENCHMARK_V1.05.md](./PERFORMANCE_BENCHMARK_V1.05.md), and
+  [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
 Selecting the **Default Rule** (auto-created, always present) produces exactly the same output
-as V1.02 - same columns, same order, no aliases - for both `.xlsx` and `.xls` input. This is
-verified by an automated regression test that:
+as V1.02 - same columns, same order, no aliases - for both `.xlsx` and `.xls` input, at both
+everyday and 300k-row scale. This is verified by an automated regression test that:
 
-1. Confirms `excel_transformer.py`, `rule_manager.py`, and `constants.py` are byte-identical to
-   the `v1.03` git tag (and `excel_transformer.py`/`constants.py` to `v1.02` as well).
+1. Confirms `rule_manager.py` and `constants.py` are byte-identical to the `v1.04.1` git tag, and
+   `excel_transformer.py`'s only change since `v1.04.1` is the documented columnar-construction
+   performance refactor (diffed and reviewed, not just asserted).
 2. Runs the V1.01-tag code against the same mock dataset used since V1.02, and diffs it against
    the current transformer's output.
-3. Applies the Default Rule to a fresh conversion and asserts the shaped result equals the
-   unshaped output exactly.
-4. Confirms `.xls` and `.xlsx` versions of the same mock dataset transform to byte-identical
-   output, both directly and through a live HTTP `/api/convert` call.
-5. Round-trips a real HTTP request: `/api/convert`'s returned file vs. re-exporting those same
+3. Applies the Default Rule to a fresh conversion (including at 300k-row scale) and asserts the
+   shaped result equals the unshaped output exactly.
+4. Confirms `.xls`, `.xlsx`, and HTML-masquerading-as-`.xls` versions of the same mock dataset
+   transform to byte-identical output, both directly and through a live HTTP `/api/convert` call -
+   now also covering `python-calamine` (the new default reader) against openpyxl/xlrd.
+5. Round-trips a real HTTP request: `/api/convert`'s returned data vs. re-exporting those same
    rows through `/api/export` with the Default Rule - byte-identical spreadsheets.
 
-All checks passed on a 150-PPID / 814-row mock dataset. No existing V1.01-V1.03 functionality was
-removed - notification and layout changes reorganize where feedback appears, not what exists.
+All checks passed on both the original 150-PPID / 814-row mock dataset and a 8,500-PPID /
+300,474-row (46,586 output row) dataset. No existing V1.01-V1.04.1 functionality was removed -
+the Rule Editor moving behind an Advanced toggle is a default-visibility change, not a removal.

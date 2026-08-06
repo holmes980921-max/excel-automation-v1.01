@@ -4,11 +4,14 @@ backend/.venv/
 *.pyc
 backend/scripts/*.xlsx
 backend/scripts/*.xls
+backend/.coverage
+backend/.pytest_cache/
 
 # Node / Next.js
 frontend/node_modules/
 frontend/.next/
 frontend/out/
+frontend/coverage/
 *.tsbuildinfo
 
 # Env / secrets

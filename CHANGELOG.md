@@ -1,5 +1,70 @@
 # Changelog
 
+## v1.05 - Performance, Reliability & Observability
+
+### Release Notes
+
+V1.05 is an engineering-quality release: no new business features, per its own spec. The
+headline result is an **8.6x speedup at the app's target 300,000-row scale** (15.24s → 1.77s),
+achieved by adopting a Rust-based excel reader (`python-calamine`) only after validating it
+produces byte-and-type-identical output to the previous engines, and by removing a wholly unused
+xlsx-write pass that ran on every conversion. Alongside that: a Processing Overlay so long
+conversions never look frozen, a 250 MB upload cap and broader exception handling for
+reliability, structured logging plus an opt-in Debug Mode for observability, real `pytest`/
+`Vitest` test suites where none existed before, and a simplified default UI (Transformation
+Rules now live behind Settings → Advanced; the header no longer hardcodes a version). Full
+detail: [PERFORMANCE_BENCHMARK_V1.05.md](./PERFORMANCE_BENCHMARK_V1.05.md),
+[TEST_COVERAGE_V1.05.md](./TEST_COVERAGE_V1.05.md),
+[CODE_REVIEW_V1.05.md](./CODE_REVIEW_V1.05.md) (scored **A-**).
+
+### Added
+- `python-calamine` as the default `.xlsx`/`.xls` reader (openpyxl/xlrd remain as an automatic,
+  tested fallback) - validated byte-and-type-identical across 6 scenarios before adoption
+  (`backend/tests/test_calamine_equivalence.py`)
+- `backend/scripts/benchmark.py` - reusable performance harness (timing per stage, peak memory
+  via a background RSS sampler, rows/sec), backing the Performance Benchmark Report
+- `backend/app/utils/perf.py` (`PeakMemorySampler`) and `logging_config.py` (structured
+  Application/Error/Performance/Debug logging) - shared by the benchmark script and the app itself
+- Optional Debug Mode (Settings menu, off by default; `?debug=true` on `/api/convert*`) - adds
+  per-stage timing, peak memory, and which read engine was used to the Status Bar and API response
+- `MAX_UPLOAD_SIZE_BYTES` (250 MB) upload cap with a clean 413 response
+- A global FastAPI exception handler as a second line of defense beyond each route's own
+  `except Exception` handling
+- `ProcessingOverlay` component: shown immediately on Convert, cycles through stage labels
+  (Reading Excel → Parsing Workbook → Applying Transformation Rules → Generating Output →
+  Preparing Preview), an indeterminate progress bar (honest about not having real mid-request
+  progress from a synchronous HTTP call), and a rough time estimate from file size
+- Upload/Convert are disabled and the dialog can't be dismissed while a conversion is in flight,
+  preventing duplicate requests
+- `AboutDialog` (Settings menu): app name, version, git tag, build date, backend/frontend framework
+- `Settings → Show Advanced Features` toggle (off by default) - hides/shows the Transformation
+  Rule Editor without removing any functionality
+- `GET /api/version` endpoint, backing the About dialog instead of a hardcoded frontend string
+- `backend/tests/` - 37 `pytest` tests (88% line coverage): calamine equivalence, format
+  detection, transformer invariants, rule shaping, and full HTTP-level route tests via
+  `TestClient` (including the new upload-size-limit and debug-mode behavior)
+- Frontend `Vitest` suite - 25 tests (72% coverage on touched files): natural sort, upload
+  rejection messages, rule shaping/import-export, `StatusBar`, `ProcessingOverlay`
+- `frontend/lib/uploadValidation.ts` - file-rejection-message logic extracted out of
+  `UploadDialog.tsx` specifically so it's unit-testable without mounting a component
+
+### Changed
+- `ConvertResponse` no longer includes `file_base64` - it was generated on every conversion but
+  never read by the frontend (Download already went through the separate `/api/export`
+  endpoint); removing it eliminated a full xlsx-write-and-base64-encode pass from every request
+- `ExcelTransformer._to_dataframe` builds columns as dict-of-lists instead of a list of per-row
+  dicts - faster and leaner at scale, same output
+- Excel reads use calamine by default (see Added); openpyxl's `read_only=True` mode is used for
+  the fallback path
+- The app header now reads "Excel Automation" (no version suffix); version is shown live in the
+  About dialog instead
+
+### Fixed
+- No upload size limit previously existed - an arbitrarily large file would be read entirely
+  into memory before any validation ran (a real OOM/crash risk, flagged in `CODE_REVIEW_V1.04.md`)
+
+---
+
 ## v1.04.1 - Patch Release
 
 ### Fixed
