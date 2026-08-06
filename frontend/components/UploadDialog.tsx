@@ -13,40 +13,25 @@ import {
   Button,
   Box,
   Typography,
-  CircularProgress,
 } from "@mui/material";
 import { FileSpreadsheet, UploadCloud, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { convertFile, convertText, type ConvertResponse } from "@/lib/api";
+import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
+import ProcessingOverlay from "@/components/ProcessingOverlay";
 
 export type { ConvertResponse, ConversionSummary } from "@/lib/api";
-
-const ACCEPTED_TYPES = {
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-  "application/vnd.ms-excel.sheet.macroEnabled.12": [".xlsm"],
-  "application/vnd.ms-excel": [".xls"],
-};
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onConverted: (data: ConvertResponse) => void;
+  debugMode: boolean;
 };
 
 type Mode = "file" | "paste";
 
-function describeRejection(rejection: FileRejection): string {
-  const code = rejection.errors[0]?.code;
-  if (code === "file-invalid-type") {
-    return `"${rejection.file.name}" isn't a supported file type. Please use .xls, .xlsx, or .xlsm.`;
-  }
-  if (code === "too-many-files") {
-    return "Please drop a single file at a time.";
-  }
-  return rejection.errors[0]?.message ?? `"${rejection.file.name}" could not be used.`;
-}
-
-export default function UploadDialog({ open, onClose, onConverted }: Props) {
+export default function UploadDialog({ open, onClose, onConverted, debugMode }: Props) {
   const [mode, setMode] = useState<Mode>("file");
   const [file, setFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
@@ -67,17 +52,20 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
   const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone({
     onDrop,
     multiple: false,
-    accept: ACCEPTED_TYPES,
+    accept: ACCEPTED_FILE_TYPES,
+    disabled: loading,
   });
 
   const handleConvert = async () => {
+    if (loading) return; // belt-and-suspenders against a duplicate in-flight request
     if (mode === "file" && !file) return;
     if (mode === "paste" && !pastedText.trim()) return;
 
     setLoading(true);
     setError(null);
     try {
-      const data = mode === "file" ? await convertFile(file as File) : await convertText(pastedText);
+      const data =
+        mode === "file" ? await convertFile(file as File, debugMode) : await convertText(pastedText, debugMode);
       onConverted(data);
       setFile(null);
       setPastedText("");
@@ -91,6 +79,11 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
     }
   };
 
+  const handleClose = () => {
+    if (loading) return; // prevent dismissing mid-request (backdrop click / Escape)
+    onClose();
+  };
+
   const canConvert = mode === "file" ? !!file : !!pastedText.trim();
 
   const dropzoneBorderColor = isDragReject ? "error.main" : isDragAccept ? "success.main" : "divider";
@@ -101,12 +94,14 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
       : "transparent";
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Upload Data</DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ position: "relative" }}>
+        <ProcessingOverlay open={loading} fileSizeMB={file ? file.size / (1024 * 1024) : undefined} />
+
         <Tabs value={mode} onChange={(_, v) => setMode(v)} sx={{ mb: 2 }}>
-          <Tab label="File Upload" value="file" />
-          <Tab label="Paste" value="paste" />
+          <Tab label="File Upload" value="file" disabled={loading} />
+          <Tab label="Paste" value="paste" disabled={loading} />
         </Tabs>
 
         {mode === "file" ? (
@@ -118,7 +113,7 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
               borderRadius: 2,
               p: 4,
               textAlign: "center",
-              cursor: "pointer",
+              cursor: loading ? "default" : "pointer",
               background: dropzoneBackground,
               transition: "border-color 0.15s ease, background 0.15s ease",
             }}
@@ -148,6 +143,7 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
             multiline
             minRows={8}
             fullWidth
+            disabled={loading}
             placeholder="Copy a range from Excel (including the header row) and paste here (Ctrl+V)"
             value={pastedText}
             onChange={(e) => setPastedText(e.target.value)}
@@ -161,9 +157,10 @@ export default function UploadDialog({ open, onClose, onConverted }: Props) {
         )}
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={handleClose} disabled={loading}>
+          Cancel
+        </Button>
         <Button variant="contained" disabled={!canConvert || loading} onClick={handleConvert}>
-          {loading ? <CircularProgress size={18} sx={{ mr: 1 }} /> : null}
           Convert
         </Button>
       </DialogActions>

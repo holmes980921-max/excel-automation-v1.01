@@ -18,13 +18,20 @@ export type ConversionSummary = {
   conversion_time_seconds: number;
 };
 
+export type DebugInfo = {
+  stages_seconds: Record<string, number>;
+  total_seconds: number;
+  peak_memory_mb: number;
+  engine_used: string;
+};
+
 export type ConvertResponse = {
   filename: string;
   columns: string[];
   rows: Record<string, unknown>[];
   total_rows: number;
-  file_base64: string;
   summary: ConversionSummary;
+  debug: DebugInfo | null;
 };
 
 export type ExportResponse = {
@@ -39,16 +46,19 @@ async function parseErrorDetail(res: Response, fallback: string): Promise<string
   return (body && typeof body.detail === "string" && body.detail) || fallback;
 }
 
-export async function convertFile(file: File): Promise<ConvertResponse> {
+export async function convertFile(file: File, debug = false): Promise<ConvertResponse> {
   const formData = new FormData();
   formData.append("file", file);
-  const res = await fetch(`${API_BASE}/api/convert`, { method: "POST", body: formData });
+  const res = await fetch(`${API_BASE}/api/convert${debug ? "?debug=true" : ""}`, {
+    method: "POST",
+    body: formData,
+  });
   if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Conversion failed (${res.status})`));
   return res.json();
 }
 
-export async function convertText(text: string): Promise<ConvertResponse> {
-  const res = await fetch(`${API_BASE}/api/convert-text`, {
+export async function convertText(text: string, debug = false): Promise<ConvertResponse> {
+  const res = await fetch(`${API_BASE}/api/convert-text${debug ? "?debug=true" : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
@@ -77,6 +87,17 @@ export async function checkHealth(): Promise<boolean> {
     return res.ok;
   } catch {
     return false;
+  }
+}
+
+export async function getBackendVersion(): Promise<string | null> {
+  try {
+    const res = await fetch(`${API_BASE}/api/version`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return typeof data.version === "string" ? data.version : null;
+  } catch {
+    return null;
   }
 }
 
