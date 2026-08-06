@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.04.1 - Patch Release
+
+### Fixed
+- **Critical: `.xls` conversion failure.** Root cause: many ERP/MES "export to Excel" tools
+  actually write an HTML `<table>` and save it with a `.xls` extension - Excel opens these
+  transparently (and Windows labels them "Microsoft Excel 97-2003 Worksheet" purely from the
+  extension), but our byte-signature check only recognized true OLE2/ZIP binaries and rejected
+  them with "Unrecognized file format". Reproduced with a genuine Excel-saved `.xls` generated
+  via COM automation on a real Excel install, confirming true binary `.xls`/`.xlsx` were never
+  broken - only this specific, common export pattern. Fixed by detecting an HTML document
+  (`_looks_like_html`) before falling back to the OLE2/ZIP signature check, and parsing it with
+  `pandas.read_html` (new `lxml` dependency). Both `.xls` variants now produce byte-identical
+  output to the equivalent `.xlsx`.
+- **Medium: zebra striping (and row hover/selected highlighting) not rendering.** Root cause:
+  the bundled AG Grid v36 "legacy" CSS theme (`ag-theme-quartz.css`) defines no CSS rules at all
+  for `.ag-row-odd`/`.ag-row-even`/`.ag-row-hover`/`.ag-row-selected` - the `--ag-odd-row-*`/
+  `--ag-row-hover-color`/`--ag-selected-row-background-color` custom properties set in V1.04 were
+  never consumed by anything (verified by inspecting the shipped stylesheet directly). AG Grid's
+  JS does still add those four classes to each row based on data row index (not DOM position, so
+  it stays correct under virtualization), so fixed by writing explicit CSS rules against those
+  classes instead of relying on theme variables this theme build never reads. Row hover and
+  selected-row highlighting - both explicit V1.03 requirements - turn out to have been silently
+  non-functional since V1.03 for the same reason; fixed as part of the same root cause.
+- **UX: Status Bar didn't visibly return to an idle state.** The success-message auto-clear timer
+  (4s) was already firing correctly, but the bar just went blank afterward with no visible
+  confirmation anything happened - easy to misread as stuck. Now shows a neutral "Ready" state
+  whenever no transient message is active.
+
+### Added
+- `backend/tests/` - a real, committed `pytest` suite (17 tests: format detection/HTML-masquerading-as-.xls,
+  core transformer invariants, rule manager shaping/fallbacks). Run with `pytest` from `backend/`.
+  A first step against the "no automated test suite" gap noted in `CODE_REVIEW_V1.04.md`.
+
+### Verified
+- All V1.01-V1.04 functionality re-confirmed: `excel_transformer.py`, `rule_manager.py`, and
+  `constants.py` remain byte-identical to the `v1.03` tag; the full V1.01-vs-current regression
+  chain still passes; `.xlsx`, `.xlwt`-generated `.xls`, and real-Excel-saved `.xls` all convert
+  to byte-identical output via a live HTTP `/api/convert` call.
+
+---
+
 ## v1.04 - Production Readiness Release
 
 ### Added

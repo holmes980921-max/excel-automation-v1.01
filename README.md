@@ -5,7 +5,7 @@ Value excel export into a flat table - one row per `TS#` block - and lets you cu
 columns appear, in what order, and under what display name, entirely through the UI (no code
 changes required).
 
-**Current version: V1.04 - Production Readiness Release**
+**Current version: V1.04.1**
 
 ## Quick Start (Windows)
 
@@ -194,8 +194,9 @@ excel-automation-v1.01/
 │   │   └── utils/
 │   │       └── excel_io.py            # In-memory excel read/write; .xls/.xlsx auto-detection, column resolution
 │   ├── scripts/make_mock.py           # Production-like mock data generator (.xlsx and .xls)
+│   ├── tests/                         # pytest suite (run: pytest, from backend/)
 │   ├── requirements.txt
-│   └── requirements-dev.txt           # Only xlwt, for generating .xls mock fixtures
+│   └── requirements-dev.txt           # xlwt (mock .xls fixtures) + pytest
 └── frontend/
     ├── app/
     │   ├── page.tsx                   # Toolbar / split view (Rule Editor + Grid) / status bar
@@ -229,8 +230,11 @@ concerns independent and separately testable.
   rule save/update/delete/import/export; live preview; AG Grid-based Excel-style UI.
 - **V1.04** - Production readiness: .xls support with auto-detection, one-click run/update
   scripts, upload UX polish, calmer status-bar notifications, root-caused framework warnings,
-  code-quality pass. See [CHANGELOG.md](./CHANGELOG.md) and
-  [CODE_REVIEW_V1.04.md](./CODE_REVIEW_V1.04.md) for details.
+  code-quality pass. See [CODE_REVIEW_V1.04.md](./CODE_REVIEW_V1.04.md) for the full assessment.
+- **V1.04.1** - Patch: fixed `.xls` files that are actually HTML tables (a common ERP/MES export
+  pattern) being rejected outright; fixed zebra striping/row hover/selected highlighting not
+  rendering (the AG Grid theme never wired them up); Status Bar now shows an idle "Ready" state;
+  added a real `pytest` suite under `backend/tests/`. See [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
