@@ -50,22 +50,35 @@ class ConversionSummaryModel(BaseModel):
     conversion_time_seconds: float
 
 
+class DebugInfo(BaseModel):
+    """Extra diagnostics, only populated when the client opts into Debug
+    Mode (?debug=true) - never sent otherwise, and never on by default."""
+
+    stages_seconds: dict[str, float]
+    total_seconds: float
+    peak_memory_mb: float
+    engine_used: str
+
+
 class ConvertResponse(BaseModel):
     """Response returned after a successful conversion.
 
-    The converted file is returned inline as base64 so the frontend never
-    has to re-request a file from disk - nothing is persisted server-side.
     `rows` carries the *entire* converted dataset (not just a preview slice)
-    so client-side search/sort in the UI has the full data to work with
-    without any further API requests.
+    so client-side search/sort/rule-shaping in the UI has the full data to
+    work with without any further API requests. No file is generated here -
+    the download button calls /api/export (stateless, reshapes `rows` per
+    the active rule) only when the user actually wants a file, instead of
+    every conversion paying for an xlsx write + base64 encode that's
+    usually never downloaded (V1.05: this was ~22% of total conversion time
+    at 300k rows - see the performance benchmark report).
     """
 
     filename: str
     columns: list[str]
     rows: list[dict[str, Any]]
     total_rows: int
-    file_base64: str
     summary: ConversionSummaryModel
+    debug: DebugInfo | None = None
 
 
 class ExportResponse(BaseModel):
