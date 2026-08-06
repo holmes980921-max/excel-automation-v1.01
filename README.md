@@ -5,7 +5,7 @@ Value excel export into a flat table - one row per `TS#` block - and lets you cu
 columns appear, in what order, and under what display name, entirely through the UI (no code
 changes required).
 
-**Current version: V1.05** (see the in-app **About** dialog, under the Settings menu, for the
+**Current version: V1.06** (see the in-app **About** dialog, under the Settings menu, for the
 live version/build info - the header intentionally no longer hardcodes a version string)
 
 ## Quick Start (Windows)
@@ -22,6 +22,30 @@ manual setup required. See [Developer Experience](#developer-experience) below f
 [Troubleshooting](#troubleshooting) if something doesn't come up.
 
 ## Features
+
+### Productivity & User Experience (V1.06)
+- **Add Description** - after converting, optionally upload a Description excel file (`PPID`,
+  `DESC` columns) to automatically append a `DESC` column to every matching row, by `PPID`
+  (left join - unmatched rows are left as `-`, existing converted data is never modified). Removes
+  the manual VLOOKUP/XLOOKUP step. The Description file's `PPID` must be unique; a duplicate is
+  rejected with a clear error rather than silently picking a winner.
+- **Preview Rows** - choose how many rows the grid actually renders: 100 (default), 500, 1000,
+  5000, or All. The full dataset is always available for search/save - this only controls render
+  cost.
+- **Search follows Preview Rows** - search always matches against the entire dataset (the match
+  count is always accurate), but only renders up to the current Preview Rows setting of those
+  matches, e.g. "342 matches - Showing first 100 rows".
+- **Large Dataset Warning** - selecting Preview Rows = All shows a confirmation first (rendering/
+  searching every row of a large dataset can be slow), with a "Don't show this warning again"
+  option persisted locally.
+- **Quick Save / Save As** - replaces the old single Download button. **Quick Save** downloads
+  immediately with an auto-generated filename (`RCC_converted_YYMMDD_HHMMSS.xlsx`). **Save As**
+  opens the OS-native save dialog (via the browser's File System Access API - Chromium-based
+  browsers only; Firefox/Safari fall back to the same behavior as Quick Save, since neither
+  implements that API). Note: no browser can reveal a saved file in the OS file explorer from a
+  web page (no such API exists for a sandboxed page), so there is no "Open Folder" action after
+  saving.
+- **Status Bar** now shows Description match/unmatch counts once Add Description has run.
 
 ### Core conversion (V1.01+)
 - **File upload or clipboard paste** - drag & drop / choose a file, or copy a range out of Excel
@@ -96,12 +120,12 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Backend (pytest, 37 tests)
+# Backend (pytest, 51 tests)
 cd backend
 ./.venv/Scripts/pip install -r requirements-dev.txt
 ./.venv/Scripts/python.exe -m pytest                              # or: pytest --cov=app --cov-report=term-missing
 
-# Frontend (Vitest, 25 tests)
+# Frontend (Vitest, 37 tests)
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
 ```
@@ -137,8 +161,22 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
 4. The Preview grid and the row/column counts in the status bar update instantly as you edit.
 5. **Save As** a new rule, **Update** the current one, **Delete** it, or **Reset to Default**.
 6. **Export**/**Import** a rule as `.json` to share it with a teammate.
-7. Click **Download** in the toolbar at any time to export the excel file shaped exactly like the
-   current preview - the original upload is never needed again for this.
+7. Click **Quick Save** or **Save As** in the toolbar at any time to export the excel file shaped
+   exactly like the current preview (including a `DESC` column if Add Description has run) - the
+   original upload is never needed again for this.
+
+## Add Description Guide
+
+1. After converting, click **Add Description** in the toolbar.
+2. Upload a Description excel file with a `PPID` column and a `DESC` (or `Description`) column.
+3. Every converted row whose `PPID` matches a row in the Description file gets that `DESC` value;
+   rows sharing a `PPID` all receive the same `DESC`. Unmatched rows are left as `-`.
+4. The grid immediately shows the new `DESC` column, and the Status Bar shows how many `PPID`s
+   matched vs. didn't.
+5. Re-running Add Description with a different file always re-merges against the original
+   conversion (never stacks onto a previous merge) - so switching description files is safe.
+6. `DESC` rides along on **Quick Save**/**Save As** regardless of which Transformation Rule is
+   active, since it isn't part of the rule-shapeable column set.
 
 ## Rule JSON Specification
 
@@ -240,6 +278,18 @@ well under this limit - if you're hitting it, double check the file is what you 
 **I can't find the Transformation Rules button.**
 It's hidden by default in V1.05 - see step 0 of the [Rule Editor Guide](#rule-editor-guide).
 
+**Add Description says the file is missing required columns, or has a duplicate PPID.**
+The Description file needs a `PPID` column and a `DESC` (or `Description`) column, matched by
+header name regardless of position. `PPID` must be unique in the Description file - if it isn't,
+the error message lists which `PPID`s repeat so you can fix the source file.
+
+**Save As doesn't open a native folder picker.**
+The OS-native Save dialog uses the browser's File System Access API, which only Chromium-based
+browsers (Chrome, Edge) implement. On Firefox/Safari, Save As falls back to the same behavior as
+Quick Save (an immediate download to your browser's configured download location) - this is a
+browser capability gap, not a bug. There is also no "Open Folder" button after saving, for the
+same reason: no browser exposes an API for a web page to open the OS file explorer.
+
 ## Folder structure
 
 ```
@@ -251,13 +301,15 @@ excel-automation-v1.01/
 ├── PERFORMANCE_BENCHMARK_V1.05.md  # V1.04 vs V1.05 methodology + results
 ├── TEST_COVERAGE_V1.05.md          # Backend/frontend coverage breakdown
 ├── CODE_REVIEW_V1.05.md            # Architecture/performance/reliability/... review + score
+├── CODE_REVIEW_V1.06.md            # V1.06 review + score (Add Description, Preview Rows, Save UX)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app entry, CORS, logging setup, global exception handler
 │   │   ├── api/routes.py              # HTTP layer only - calls into services/; upload size limit, Debug Mode
 │   │   ├── services/
 │   │   │   ├── excel_transformer.py   # Core conversion logic (unchanged since V1.02) + summary stats
-│   │   │   └── rule_manager.py        # Validates/applies a TransformationRule (column select/order/alias)
+│   │   │   ├── rule_manager.py        # Validates/applies a TransformationRule (column select/order/alias)
+│   │   │   └── description_merger.py  # V1.06: left-joins a DESC column onto converted rows by PPID
 │   │   ├── models/
 │   │   │   ├── constants.py           # OUTPUT_COLUMNS etc. - the fixed internal column set
 │   │   │   └── schemas.py             # Pydantic request/response models incl. TransformationRule, DebugInfo
@@ -268,7 +320,7 @@ excel-automation-v1.01/
 │   ├── scripts/
 │   │   ├── make_mock.py               # Production-like mock data generator (.xlsx and .xls)
 │   │   └── benchmark.py               # Performance benchmark harness (timing + peak memory + throughput)
-│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 37 tests, 88% coverage
+│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 51 tests
 │   ├── requirements.txt
 │   └── requirements-dev.txt           # xlwt (mock .xls fixtures), pytest, pytest-cov, httpx (TestClient)
 └── frontend/
@@ -278,20 +330,25 @@ excel-automation-v1.01/
     │   └── globals.css
     ├── components/
     │   ├── AppProviders.tsx           # MUI theme + Sonner toaster (errors/warnings only)
-    │   ├── AppToolbar.tsx             # Upload / Download / Search / Settings menu (Advanced, Debug, About)
-    │   ├── StatusBar.tsx              # Rows/Columns/Filtered/Rule + completion feedback + Debug metrics
-    │   ├── ProcessingOverlay.tsx      # Shown on Convert: stage text, indeterminate progress, ETA
+    │   ├── AppToolbar.tsx             # Upload / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
+    │   ├── StatusBar.tsx              # Rows/Columns/matches/Rule + Description stats + completion feedback + Debug metrics
+    │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA
     │   ├── AboutDialog.tsx            # App name/version/git tag/build date/backend+frontend framework
     │   ├── UploadDialog.tsx           # File (react-dropzone, .xls/.xlsx/.xlsm) or paste input
+    │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID
+    │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
-    │   └── ExcelGrid.tsx              # AG Grid preview, shaped live by the active rule
+    │   └── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices)
     ├── lib/
     │   ├── api.ts                     # Centralized backend API client (single source for fetch calls)
     │   ├── naturalCompare.ts          # Shared natural-sort comparator (used by AG Grid column sort)
     │   ├── rules.ts                   # TransformationRule type, localStorage persistence, shaping helpers
     │   ├── uploadValidation.ts        # Pure file-rejection-message logic (extracted for testability)
+    │   ├── searchFilter.ts            # V1.06: pure row-search predicate (search always runs on the full dataset)
+    │   ├── filename.ts                # V1.06: default save filename (RCC_converted_YYMMDD_HHMMSS.xlsx)
     │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE for the About dialog
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 25 tests
+    ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 37 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -321,6 +378,11 @@ concerns independent and separately testable.
   dialog, no hardcoded version). See [CODE_REVIEW_V1.05.md](./CODE_REVIEW_V1.05.md),
   [PERFORMANCE_BENCHMARK_V1.05.md](./PERFORMANCE_BENCHMARK_V1.05.md), and
   [CHANGELOG.md](./CHANGELOG.md).
+- **V1.06** - Productivity & UX: Add Description (PPID-based DESC auto-merge, replacing manual
+  VLOOKUP/XLOOKUP), Preview Rows (100/500/1000/5000/All) with search that always matches the full
+  dataset, a Large Dataset Warning before rendering everything, and Quick Save/Save As (replacing
+  Download) with an auto-generated timestamped filename. See
+  [CODE_REVIEW_V1.06.md](./CODE_REVIEW_V1.06.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -344,3 +406,9 @@ everyday and 300k-row scale. This is verified by an automated regression test th
 All checks passed on both the original 150-PPID / 814-row mock dataset and a 8,500-PPID /
 300,474-row (46,586 output row) dataset. No existing V1.01-V1.04.1 functionality was removed -
 the Rule Editor moving behind an Advanced toggle is a default-visibility change, not a removal.
+
+**V1.06**: `excel_transformer.py` and `constants.py` remain byte-identical to the `v1.05` git tag
+(the Add Description feature is a separate, additive merge step that only runs after conversion
+and never touches the transformation engine) - confirmed by diff, not just assertion. The plain
+convert → download flow (no Add Description, default Preview Rows) is unchanged; Add Description
+and the save-flow rename are purely additive.

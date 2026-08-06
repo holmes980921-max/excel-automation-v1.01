@@ -1,5 +1,65 @@
 # Changelog
 
+## v1.06 - Productivity & User Experience
+
+### Release Notes
+
+V1.06 focuses on eliminating repetitive post-conversion Excel work. The headline feature is
+**Add Description**: upload a `PPID`/`DESC` lookup file and every converted row gets its `DESC`
+automatically merged in (left join, unmatched rows left as `-`), removing the manual VLOOKUP/
+XLOOKUP step users were doing by hand. Alongside that: a **Preview Rows** control (100/500/1000/
+5000/All) so large datasets don't force the grid to render everything, search that always matches
+against the full dataset regardless of the preview setting, a Large Dataset Warning before
+rendering everything, and **Quick Save**/**Save As** (replacing the single Download button) with
+an auto-generated timestamped filename. The core transformation engine
+(`excel_transformer.py`/`constants.py`) is untouched - confirmed byte-identical to the `v1.05` git
+tag. Full detail: [CODE_REVIEW_V1.06.md](./CODE_REVIEW_V1.06.md).
+
+### Added
+- `POST /api/add-description` - stateless endpoint that left-joins a `DESC` column onto
+  already-converted rows by `PPID` (`backend/app/services/description_merger.py`); validates the
+  Description file has `PPID`/`DESC` columns and that `PPID` is unique, and reports matched/
+  unmatched `PPID` counts
+- `read_description_file()` in `excel_io.py` - reuses the same format auto-detection (calamine-
+  first, HTML-as-.xls, openpyxl/xlrd fallback) as the main conversion path
+- `AddDescriptionDialog` component - upload flow for the Description file, always merges against
+  the original conversion (never stacks onto a previous merge)
+- `DESC` now rides along on `/api/export` whenever present in the submitted rows, regardless of
+  the active Transformation Rule (it isn't part of the rule-shapeable column set)
+- Preview Rows selector (100/500/1000/5000/All) in the toolbar; `ExcelGrid` now renders exactly
+  the rows/columns it's given instead of doing its own AG Grid quick-filtering
+- `frontend/lib/searchFilter.ts` - pure row-search predicate; search always evaluates against the
+  full dataset so the match count is accurate independent of the Preview Rows setting
+- `LargeDatasetWarningDialog` - confirmation before Preview Rows = All, with a "Don't show this
+  warning again" preference persisted to `localStorage`
+- `frontend/lib/filename.ts` (`generateDefaultFilename`) - `RCC_converted_YYMMDD_HHMMSS.xlsx`
+- `saveAs()` in `lib/api.ts` - Save As via the File System Access API (`showSaveFilePicker`,
+  Chromium-based browsers), falling back to the same download-trigger Quick Save uses elsewhere
+- `frontend/types/file-system-access.d.ts` - ambient types for `showSaveFilePicker` (not part of
+  TypeScript's bundled `lib.dom.d.ts`)
+- 14 new backend tests (`test_description_merge.py`, `/api/add-description` + DESC-passthrough
+  cases in `test_routes.py`) and 12 new frontend tests (`filename.test.ts`, `searchFilter.test.ts`,
+  expanded `StatusBar.test.tsx`)
+
+### Changed
+- Toolbar: single **Download** button replaced by **Quick Save** (instant, default filename) and
+  **Save As** (native save dialog where supported)
+- `StatusBar`: "Filtered" (tied to AG Grid's internal quick filter) replaced by a combined rows/
+  matches summary ("Showing 100 of 8,542 rows" / "342 matches - Showing first 100 rows"), plus
+  Description matched/unmatched counts once Add Description has run
+- `ExcelGrid` no longer performs its own filtering (`quickFilterText` prop removed) - the caller
+  (`app/page.tsx`) now filters and slices rows before they reach the grid, which is what makes
+  "search matches the full dataset, display respects Preview Rows" possible
+- A new conversion (re-upload or re-paste) always discards any prior Add Description merge and
+  resets Preview Rows/search to their defaults
+
+### Known limitations
+- Save As's native folder picker only works in Chromium-based browsers (Chrome, Edge); Firefox/
+  Safari fall back to Quick Save's behavior, since neither implements the File System Access API
+- There is no "Open Folder" action after saving - no browser exposes an API for a sandboxed web
+  page to open the OS file explorer, so this affordance from the original proposal isn't
+  implementable client-side
+
 ## v1.05 - Performance, Reliability & Observability
 
 ### Release Notes
