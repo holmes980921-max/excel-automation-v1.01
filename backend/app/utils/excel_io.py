@@ -180,6 +180,40 @@ def _resolve_input_columns(df: pd.DataFrame) -> tuple[Any, Any, Any]:
     return columns[0], columns[1], columns[2]
 
 
+def _resolve_description_columns(df: pd.DataFrame) -> tuple[Any, Any]:
+    """Locate the PPID / DESC columns in a description lookup file, by
+    header name (case-insensitive) - same matching style as
+    `_resolve_input_columns`, but both columns are required by name since
+    a description file has no fixed positional shape to fall back on."""
+    by_lower_name = {str(col).strip().lower(): col for col in df.columns}
+    ppid_col = by_lower_name.get("ppid")
+    desc_col = by_lower_name.get("desc") or by_lower_name.get("description")
+
+    missing = [name for name, col in (("PPID", ppid_col), ("DESC", desc_col)) if col is None]
+    if missing:
+        raise InvalidExcelFormatError(
+            f"Description file is missing required column(s): {', '.join(missing)}"
+        )
+    return ppid_col, desc_col
+
+
+def read_description_file(file_bytes: bytes) -> pd.DataFrame:
+    """Read a Description lookup file (PPID -> DESC) for the Add Description
+    feature. Same format auto-detection as `read_raw_rows` (HTML-as-.xls,
+    .xls, .xlsx/.xlsm, calamine-first). Returns a 2-column DataFrame with
+    columns literally named "PPID" and "DESC", regardless of the source
+    file's original header casing/wording.
+    """
+    if _looks_like_html(file_bytes):
+        df = _read_html_table(file_bytes)
+    else:
+        fallback_engine = detect_excel_engine(file_bytes)
+        df = _read_excel_binary(file_bytes, fallback_engine)
+
+    ppid_col, desc_col = _resolve_description_columns(df)
+    return df[[ppid_col, desc_col]].rename(columns={ppid_col: "PPID", desc_col: "DESC"})
+
+
 def dataframe_to_xlsx_bytes(df: pd.DataFrame, sheet_name: str = "Converted") -> bytes:
     """Serialize a DataFrame to .xlsx bytes, entirely in memory."""
     buffer = BytesIO()

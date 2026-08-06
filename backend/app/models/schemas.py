@@ -86,5 +86,20 @@ class ExportResponse(BaseModel):
     file_base64: str
 
 
+class AddDescriptionResponse(BaseModel):
+    """Response for the stateless Add Description merge (V1.06).
+
+    `rows` mirrors ConvertResponse's shape but with a `DESC` key added to
+    every row - the client swaps its working row set for this one.
+    """
+
+    columns: list[str]
+    rows: list[dict[str, Any]]
+    total_rows: int
+    matched_count: int
+    unmatched_count: int
+    unmatched_ppids: list[str]
+
+
 class ErrorResponse(BaseModel):
     detail: str

@@ -8,15 +8,17 @@ request is logged beyond structural facts (see app/utils/logging_config.py)
 """
 
 import base64
+import json
 import time
 from dataclasses import asdict
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File
+from fastapi import APIRouter, Form, HTTPException, Query, UploadFile, File
 
 from app.models.constants import FULL_OUTPUT_COLUMNS
 from app.models.schemas import (
+    AddDescriptionResponse,
     ConversionSummaryModel,
     ConvertResponse,
     ConvertTextRequest,
@@ -24,12 +26,14 @@ from app.models.schemas import (
     ExportRequest,
     ExportResponse,
 )
+from app.services.description_merger import merge_description
 from app.services.excel_transformer import ExcelTransformer
 from app.services import rule_manager
 from app.utils.excel_io import (
     InvalidExcelFormatError,
     dataframe_to_xlsx_bytes,
     parse_pasted_text,
+    read_description_file,
     read_raw_rows,
 )
 from app.utils.logging_config import get_logger
@@ -218,7 +222,9 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
         raise HTTPException(status_code=400, detail="No rows to export.")
 
     try:
-        df = pd.DataFrame(payload.rows, columns=FULL_OUTPUT_COLUMNS)
+        raw_df = pd.DataFrame(payload.rows)
+        has_desc = "DESC" in raw_df.columns
+        df = raw_df.reindex(columns=FULL_OUTPUT_COLUMNS)
         shaped = rule_manager.apply_rule(df, payload.rule)
 
         if shaped.df.shape[1] == 0:
@@ -226,6 +232,12 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
 
         renamed_df = shaped.df.copy()
         renamed_df.columns = shaped.headers
+        # DESC (V1.06 Add Description) sits outside the fixed rule column
+        # set entirely - once added, it always rides along on export
+        # regardless of which rule is active, since it isn't a
+        # rule-shapeable field.
+        if has_desc:
+            renamed_df["DESC"] = raw_df["DESC"].to_numpy()
 
         output_bytes = dataframe_to_xlsx_bytes(renamed_df)
     except HTTPException:
@@ -240,3 +252,70 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
     app_log.info("Export completed: %d rows, %.2f MB", len(renamed_df), len(output_bytes) / (1024 * 1024))
 
     return ExportResponse(filename=filename, file_base64=base64.b64encode(output_bytes).decode("ascii"))
+
+
+@router.post("/add-description", response_model=AddDescriptionResponse)
+async def add_description(
+    file: UploadFile = File(...),
+    rows: str = Form(..., description="JSON-encoded list of already-converted row objects."),
+) -> AddDescriptionResponse:
+    """Merge a DESC column onto already-converted rows by PPID (V1.06).
+
+    Stateless, same shape as /api/export: the client sends back the rows it
+    already has plus a Description lookup file; nothing is persisted
+    server-side. Always merge against the *original* converted rows (not a
+    previously-merged result) so re-running with a different description
+    file never stacks DESC values.
+    """
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xls")):
+        raise HTTPException(status_code=400, detail="Please upload a .xls, .xlsx, or .xlsm file.")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        size_mb = len(file_bytes) / (1024 * 1024)
+        limit_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
+        app_log.warning("Rejected oversized description upload: %.1f MB (limit %.0f MB)", size_mb, limit_mb)
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is too large ({size_mb:.0f} MB). The limit is {limit_mb:.0f} MB.",
+        )
+
+    try:
+        rows_data = json.loads(rows)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Row data is malformed.") from exc
+    if not isinstance(rows_data, list) or not rows_data:
+        raise HTTPException(status_code=400, detail="No rows to merge.")
+
+    try:
+        desc_df = read_description_file(file_bytes)
+        rows_df = pd.DataFrame(rows_data)
+        result = merge_description(rows_df, desc_df)
+    except InvalidExcelFormatError as exc:
+        app_log.info("Add Description rejected: %s", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 - malformed client-supplied `rows` shouldn't 500 opaquely
+        error_log.error("Unexpected error during description merge", exc_info=exc)
+        raise HTTPException(
+            status_code=400, detail="Could not merge the description file - it may be malformed."
+        ) from exc
+    finally:
+        del file_bytes
+
+    result_rows = result.df.replace({np.nan: None}).to_dict(orient="records")
+    app_log.info(
+        "Add Description completed: %d matched, %d unmatched PPIDs",
+        result.matched_count,
+        result.unmatched_count,
+    )
+
+    return AddDescriptionResponse(
+        columns=list(rows_df.columns) + ["DESC"],
+        rows=result_rows,
+        total_rows=len(result_rows),
+        matched_count=result.matched_count,
+        unmatched_count=result.unmatched_count,
+        unmatched_ppids=result.unmatched_ppids,
+    )
