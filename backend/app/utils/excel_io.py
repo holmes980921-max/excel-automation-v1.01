@@ -77,7 +77,7 @@ def _read_html_table(file_bytes: bytes) -> pd.DataFrame:
     return tables[0]
 
 
-def read_raw_rows(file_bytes: bytes) -> list[tuple[Any, Any, Any]]:
+def read_raw_rows(file_bytes: bytes, debug_info: dict[str, Any] | None = None) -> list[tuple[Any, Any, Any]]:
     """Read the first worksheet of an uploaded excel file (.xls, .xlsx/
     .xlsm, or an HTML table saved with a .xls extension - all
     auto-detected) and return the (PPID, Parameter, Reference Value)
@@ -87,19 +87,64 @@ def read_raw_rows(file_bytes: bytes) -> list[tuple[Any, Any, Any]]:
     those are located by header name (falling back to the original V1.01
     positional assumption when headers aren't recognizable) and everything
     else is ignored.
+
+    If `debug_info` is passed, it's populated with {"engine_used": ...} -
+    used only by the opt-in Debug Mode response field; normal callers can
+    ignore this parameter entirely.
     """
     if _looks_like_html(file_bytes):
         df = _read_html_table(file_bytes)
+        if debug_info is not None:
+            debug_info["engine_used"] = "html"
     else:
-        engine = detect_excel_engine(file_bytes)
-        try:
-            df = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine=engine)
-        except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
-            raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
+        fallback_engine = detect_excel_engine(file_bytes)  # also validates it's a real xlsx/xls signature
+        df = _read_excel_binary(file_bytes, fallback_engine, debug_info)
 
     ppid_col, parameter_col, value_col = _resolve_input_columns(df)
     subset = df[[ppid_col, parameter_col, value_col]]
     return list(subset.itertuples(index=False, name=None))
+
+
+def _read_excel_binary(
+    file_bytes: bytes, fallback_engine: ExcelEngine, debug_info: dict[str, Any] | None = None
+) -> pd.DataFrame:
+    """Reads a binary .xlsx/.xlsm/.xls workbook, preferring calamine.
+
+    calamine (Rust-based) reads this app's target scale (~300k rows) in
+    ~2-3s versus ~20s for openpyxl - see the V1.05 performance benchmark
+    report. Before adopting it as the default, it was validated to produce
+    byte-and-type-identical output to openpyxl/xlrd across standard,
+    large-scale, real-Excel-saved, Korean/CJK-text, numeric-value, and
+    blank-cell scenarios (backend/tests/test_calamine_equivalence.py).
+
+    Falls back to the original engine (openpyxl for .xlsx/.xlsm, xlrd for
+    .xls) for any file calamine can't handle, so an edge case outside the
+    validated scenarios degrades to the previously-shipped behavior instead
+    of failing outright.
+    """
+    try:
+        result = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine="calamine")
+        if debug_info is not None:
+            debug_info["engine_used"] = "calamine"
+        return result
+    except Exception:  # noqa: BLE001 - fall back before giving up
+        pass
+
+    # read_only streams rows instead of building openpyxl's full in-memory
+    # workbook object model (styles, merged-cell metadata, ...) we never
+    # use - meaningfully faster on large sheets even as a fallback path.
+    # xlrd has no equivalent option (BIFF8/.xls is capped at 65,536 rows
+    # anyway, so it was never the bottleneck at this app's target scale).
+    engine_kwargs = {"read_only": True} if fallback_engine == "openpyxl" else {}
+    try:
+        result = pd.read_excel(
+            BytesIO(file_bytes), sheet_name=0, header=0, engine=fallback_engine, engine_kwargs=engine_kwargs
+        )
+        if debug_info is not None:
+            debug_info["engine_used"] = f"{fallback_engine} (calamine fallback)"
+        return result
+    except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
+        raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
 
 
 def _resolve_input_columns(df: pd.DataFrame) -> tuple[Any, Any, Any]:

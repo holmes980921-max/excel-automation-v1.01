@@ -98,17 +98,23 @@ class ExcelTransformer:
         return grouped
 
     def _to_dataframe(self, grouped: dict[str, dict[int, dict[str, Any]]]) -> pd.DataFrame:
-        output_rows: list[dict[str, Any]] = []
+        # Columnar (dict-of-lists) construction instead of a list of
+        # per-row dicts: pandas can build each column directly from its own
+        # list without introspecting N row-dicts for their keys, and it
+        # avoids allocating one dict object per output row. Meaningfully
+        # less peak memory at 300k+ rows - see the V1.05 performance
+        # benchmark report.
+        columns: dict[str, list[Any]] = {col: [] for col in FULL_OUTPUT_COLUMNS}
 
         for ppid, ts_map in grouped.items():
             for ts_num in sorted(ts_map):
                 fields = ts_map[ts_num]
-                row: dict[str, Any] = {"PPID": ppid, "TS#": f"{TS_LABEL_PREFIX}{ts_num}"}
+                columns["PPID"].append(ppid)
+                columns["TS#"].append(f"{TS_LABEL_PREFIX}{ts_num}")
                 for col in OUTPUT_COLUMNS:
-                    row[col] = fields.get(col, MISSING_VALUE)
-                output_rows.append(row)
+                    columns[col].append(fields.get(col, MISSING_VALUE))
 
-        return pd.DataFrame(output_rows, columns=FULL_OUTPUT_COLUMNS)
+        return pd.DataFrame(columns, columns=FULL_OUTPUT_COLUMNS)
 
     @staticmethod
     def _clean(value: Any) -> str:

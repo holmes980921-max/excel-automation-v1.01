@@ -1,0 +1,18 @@
+{
+  "label": "V1.04",
+  "input_file": "scripts/bench_300k.xlsx",
+  "input_size_mb": 6.59,
+  "input_rows": 300474,
+  "output_rows": 46586,
+  "ppid_count": 8500,
+  "stages_seconds": {
+    "read_and_parse": 11.473,
+    "transform": 0.322,
+    "summarize": 0.006,
+    "xlsx_write": 3.441
+  },
+  "total_seconds": 15.243,
+  "peak_memory_mb": 285.0,
+  "rows_per_second": 19712.6,
+  "includes_xlsx_write": true
+}
