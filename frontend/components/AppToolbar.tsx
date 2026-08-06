@@ -16,13 +16,18 @@ import {
   ListItemText,
   Switch,
   Divider,
+  Select,
 } from "@mui/material";
-import { Upload, Download, SlidersHorizontal, Search, Settings, Info } from "lucide-react";
+import { Upload, Save, FolderOutput, SlidersHorizontal, Search, Settings, Info, FileText } from "lucide-react";
+
+export const PREVIEW_ROW_OPTIONS = [100, 500, 1000, 5000] as const;
+export type PreviewLimit = (typeof PREVIEW_ROW_OPTIONS)[number] | "all";
 
 type Props = {
   onUploadClick: () => void;
-  onDownloadClick: () => void;
-  downloadDisabled: boolean;
+  onQuickSaveClick: () => void;
+  onSaveAsClick: () => void;
+  saveDisabled: boolean;
   rulesOpen: boolean;
   onToggleRules: () => void;
   searchValue: string;
@@ -32,12 +37,17 @@ type Props = {
   debugMode: boolean;
   onToggleDebugMode: () => void;
   onOpenAbout: () => void;
+  previewLimit: PreviewLimit;
+  onPreviewLimitChange: (value: PreviewLimit) => void;
+  onAddDescriptionClick: () => void;
+  addDescriptionDisabled: boolean;
 };
 
 export default function AppToolbar({
   onUploadClick,
-  onDownloadClick,
-  downloadDisabled,
+  onQuickSaveClick,
+  onSaveAsClick,
+  saveDisabled,
   rulesOpen,
   onToggleRules,
   searchValue,
@@ -47,6 +57,10 @@ export default function AppToolbar({
   debugMode,
   onToggleDebugMode,
   onOpenAbout,
+  previewLimit,
+  onPreviewLimitChange,
+  onAddDescriptionClick,
+  addDescriptionDisabled,
 }: Props) {
   const [settingsAnchor, setSettingsAnchor] = useState<HTMLElement | null>(null);
 
@@ -60,8 +74,19 @@ export default function AppToolbar({
         <Button size="small" startIcon={<Upload size={16} />} onClick={onUploadClick}>
           Upload
         </Button>
-        <Button size="small" startIcon={<Download size={16} />} onClick={onDownloadClick} disabled={downloadDisabled}>
-          Download
+        <Button size="small" startIcon={<Save size={16} />} onClick={onQuickSaveClick} disabled={saveDisabled}>
+          Quick Save
+        </Button>
+        <Button size="small" startIcon={<FolderOutput size={16} />} onClick={onSaveAsClick} disabled={saveDisabled}>
+          Save As
+        </Button>
+        <Button
+          size="small"
+          startIcon={<FileText size={16} />}
+          onClick={onAddDescriptionClick}
+          disabled={addDescriptionDisabled}
+        >
+          Add Description
         </Button>
         {showAdvanced && (
           <Button
@@ -75,11 +100,32 @@ export default function AppToolbar({
           </Button>
         )}
 
+        <Box sx={{ display: "flex", alignItems: "center", ml: "auto", gap: 0.5 }}>
+          <Typography variant="caption" sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
+            Preview Rows
+          </Typography>
+          <Select
+            size="small"
+            value={String(previewLimit)}
+            onChange={(e) => {
+              const raw = e.target.value;
+              onPreviewLimitChange(raw === "all" ? "all" : (Number(raw) as PreviewLimit));
+            }}
+            sx={{ fontSize: 14, minWidth: 90 }}
+          >
+            {PREVIEW_ROW_OPTIONS.map((n) => (
+              <MenuItem key={n} value={String(n)}>
+                {n.toLocaleString()}
+              </MenuItem>
+            ))}
+            <MenuItem value="all">All</MenuItem>
+          </Select>
+        </Box>
+
         <Box
           sx={{
             display: "flex",
             alignItems: "center",
-            ml: "auto",
             border: "1px solid #d0d0d0",
             borderRadius: 1,
             px: 1,

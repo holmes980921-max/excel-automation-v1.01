@@ -2,17 +2,26 @@
 
 import { Box, Stack, Typography, Divider } from "@mui/material";
 import { CheckCircle2, Circle } from "lucide-react";
+import type { PreviewLimit } from "@/components/AppToolbar";
 
 type Props = {
   totalRows: number;
   columnCount: number;
-  filteredCount: number;
+  /** Rows actually rendered after search + Preview Rows slicing (V1.06). */
+  shownCount: number;
+  previewLimit: PreviewLimit;
+  /** Present only while a search query is active - total matches across the
+   * full dataset, independent of the Preview Rows slice. */
+  matchCount?: number;
   currentRuleName: string;
   ppidCount?: number;
   conversionTimeSeconds?: number;
   /** Only populated when Debug Mode is on (see Settings menu) - never shown otherwise. */
   debugPeakMemoryMb?: number;
   debugEngineUsed?: string;
+  /** Present only after a successful Add Description merge (V1.06). */
+  descriptionMatchedCount?: number;
+  descriptionUnmatchedCount?: number;
   /** Transient success feedback (e.g. "Saved rule ..."). Errors/warnings use
    * toasts instead - see AppProviders' <Toaster />. */
   statusMessage?: string | null;
@@ -29,14 +38,23 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 export default function StatusBar({
   totalRows,
   columnCount,
-  filteredCount,
+  shownCount,
+  previewLimit,
+  matchCount,
   currentRuleName,
   ppidCount,
   conversionTimeSeconds,
   debugPeakMemoryMb,
   debugEngineUsed,
+  descriptionMatchedCount,
+  descriptionUnmatchedCount,
   statusMessage,
 }: Props) {
+  const isSearching = matchCount !== undefined;
+  const rowsSummary = isSearching
+    ? `${matchCount!.toLocaleString()} matches - Showing ${previewLimit === "all" ? "all" : `first ${shownCount.toLocaleString()}`} rows`
+    : `Showing ${shownCount.toLocaleString()} of ${totalRows.toLocaleString()} rows`;
+
   return (
     <Box
       sx={{
@@ -50,13 +68,20 @@ export default function StatusBar({
       }}
     >
       <Stack direction="row" spacing={2} divider={<Divider orientation="vertical" flexItem />}>
-        <Stat label="Rows" value={totalRows} />
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          <strong style={{ color: "inherit" }}>{rowsSummary}</strong>
+        </Typography>
         <Stat label="Columns" value={columnCount} />
-        <Stat label="Filtered" value={filteredCount} />
         <Stat label="Current Rule" value={currentRuleName} />
         {ppidCount !== undefined && <Stat label="PPIDs" value={ppidCount} />}
         {conversionTimeSeconds !== undefined && (
           <Stat label="Conversion Time" value={`${conversionTimeSeconds.toFixed(2)} sec`} />
+        )}
+        {descriptionMatchedCount !== undefined && (
+          <Stat label="Description Matched PPIDs" value={descriptionMatchedCount} />
+        )}
+        {descriptionUnmatchedCount !== undefined && (
+          <Stat label="Description Unmatched PPIDs" value={descriptionUnmatchedCount} />
         )}
         {debugPeakMemoryMb !== undefined && <Stat label="Peak Memory" value={`${debugPeakMemoryMb.toFixed(1)} MB`} />}
         {debugEngineUsed !== undefined && <Stat label="Engine" value={debugEngineUsed} />}

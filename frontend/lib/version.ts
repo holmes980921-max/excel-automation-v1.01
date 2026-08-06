@@ -7,6 +7,6 @@
  * be injected automatically at build time (e.g. from `git describe --tags`
  * and the build timestamp) instead of hand-edited here.
  */
-export const FRONTEND_VERSION = "1.5.0";
-export const GIT_TAG = "v1.05";
+export const FRONTEND_VERSION = "1.6.0";
+export const GIT_TAG = "v1.06";
 export const BUILD_DATE = "2026-08-07";
