@@ -1,14 +1,8 @@
 "use client";
 
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 import { AgGridReact } from "ag-grid-react";
-import {
-  ModuleRegistry,
-  AllCommunityModule,
-  type ColDef,
-  type GridApi,
-  type GridReadyEvent,
-} from "ag-grid-community";
+import { ModuleRegistry, AllCommunityModule, type ColDef } from "ag-grid-community";
 import "ag-grid-community/styles/ag-grid.css";
 import "ag-grid-community/styles/ag-theme-quartz.css";
 import { compareValues } from "@/lib/naturalCompare";
@@ -16,16 +10,21 @@ import { resolveDisplayColumns, type TransformationRule } from "@/lib/rules";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
+type ExtraColumn = { field: string; header: string };
+
 type Props = {
+  /** Already search-filtered and Preview-Rows-sliced by the caller (see
+   * app/page.tsx) - this component just renders whatever it's given, it
+   * no longer does its own filtering. */
   rows: Record<string, unknown>[];
   rule: TransformationRule;
-  quickFilterText: string;
-  onDisplayedRowCountChange?: (count: number) => void;
+  /** Columns appended after the rule-driven ones that aren't part of the
+   * TransformationRule system (currently just DESC from Add Description,
+   * V1.06) - shown whenever present, independent of the active rule. */
+  extraColumns?: ExtraColumn[];
 };
 
-export default function ExcelGrid({ rows, rule, quickFilterText, onDisplayedRowCountChange }: Props) {
-  const gridApiRef = useRef<GridApi | null>(null);
-
+export default function ExcelGrid({ rows, rule, extraColumns = [] }: Props) {
   const columnDefs = useMemo<ColDef[]>(() => {
     const displayColumns = resolveDisplayColumns(rule);
 
@@ -42,20 +41,23 @@ export default function ExcelGrid({ rows, rule, quickFilterText, onDisplayedRowC
       cellClass: "row-number-cell",
     };
 
-    const dataCols: ColDef[] = displayColumns.map(({ field, header }, index) => ({
+    const toColDef = (field: string, header: string, pinnedFirst: boolean): ColDef => ({
       field,
       headerName: header,
-      pinned: index === 0 ? "left" : undefined,
+      pinned: pinnedFirst ? "left" : undefined,
       resizable: true,
       sortable: true,
       filter: true,
       minWidth: 90,
       comparator: (a, b) => compareValues(a, b),
       valueFormatter: (params) => (params.value === null || params.value === undefined ? "" : String(params.value)),
-    }));
+    });
 
-    return [rowNumberCol, ...dataCols];
-  }, [rule]);
+    const dataCols = displayColumns.map(({ field, header }, index) => toColDef(field, header, index === 0));
+    const extraCols = extraColumns.map(({ field, header }) => toColDef(field, header, false));
+
+    return [rowNumberCol, ...dataCols, ...extraCols];
+  }, [rule, extraColumns]);
 
   const defaultColDef = useMemo<ColDef>(
     () => ({
@@ -67,17 +69,6 @@ export default function ExcelGrid({ rows, rule, quickFilterText, onDisplayedRowC
     []
   );
 
-  const handleGridReady = (event: GridReadyEvent) => {
-    gridApiRef.current = event.api;
-    onDisplayedRowCountChange?.(event.api.getDisplayedRowCount());
-  };
-
-  const handleModelUpdated = () => {
-    if (gridApiRef.current) {
-      onDisplayedRowCountChange?.(gridApiRef.current.getDisplayedRowCount());
-    }
-  };
-
   return (
     <div className="ag-theme-quartz excel-grid" style={{ width: "100%", height: "100%" }}>
       <AgGridReact
@@ -85,11 +76,8 @@ export default function ExcelGrid({ rows, rule, quickFilterText, onDisplayedRowC
         rowData={rows}
         columnDefs={columnDefs}
         defaultColDef={defaultColDef}
-        quickFilterText={quickFilterText}
         rowSelection={{ mode: "singleRow" }}
         animateRows
-        onGridReady={handleGridReady}
-        onModelUpdated={handleModelUpdated}
       />
     </div>
   );
