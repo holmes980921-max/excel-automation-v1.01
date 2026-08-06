@@ -17,6 +17,16 @@ import pandas as pd
 _ZIP_SIGNATURE = b"PK\x03\x04"  # .xlsx / .xlsm (OOXML is a zip archive)
 _OLE2_SIGNATURE = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"  # legacy .xls (OLE2 compound file)
 
+# How many leading bytes to sniff for an HTML signature. Some export tools
+# ("Export to Excel" in many ERP/MES systems) write an HTML <table> and give
+# it a .xls extension - Excel opens these transparently (that's exactly why
+# a real user would call this "a valid .xls file"), and Windows labels them
+# "Microsoft Excel 97-2003 Worksheet" purely from the extension, even though
+# the bytes are plain HTML, not OLE2. A short boilerplate/meta preamble
+# before the first <table> is common, hence sniffing a window rather than
+# just the first few bytes.
+_HTML_SNIFF_WINDOW = 2048
+
 ExcelEngine = Literal["openpyxl", "xlrd"]
 
 
@@ -41,9 +51,36 @@ def detect_excel_engine(file_bytes: bytes) -> ExcelEngine:
     )
 
 
+def _looks_like_html(file_bytes: bytes) -> bool:
+    head = file_bytes[:_HTML_SNIFF_WINDOW].lstrip(b"\xef\xbb\xbf").lstrip()
+    head_lower = head.lower()
+    return (
+        head_lower.startswith(b"<html")
+        or head_lower.startswith(b"<!doctype html")
+        or b"<table" in head_lower[:_HTML_SNIFF_WINDOW]
+    )
+
+
+def _read_html_table(file_bytes: bytes) -> pd.DataFrame:
+    """Reads the first <table> out of an HTML file that's masquerading as
+    .xls (see _looks_like_html)."""
+    try:
+        # flavor="lxml" pins a single parser: without it, pandas silently
+        # retries with html5lib/bs4 on any failure (including "no tables
+        # found"), which can surface a confusing "missing html5lib" error
+        # instead of the actual problem.
+        tables = pd.read_html(BytesIO(file_bytes), header=0, flavor="lxml")
+    except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
+        raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
+    if not tables:
+        raise InvalidExcelFormatError("No table found in the uploaded file.")
+    return tables[0]
+
+
 def read_raw_rows(file_bytes: bytes) -> list[tuple[Any, Any, Any]]:
-    """Read the first worksheet of an uploaded excel file (.xls or .xlsx/
-    .xlsm, auto-detected) and return the (PPID, Parameter, Reference Value)
+    """Read the first worksheet of an uploaded excel file (.xls, .xlsx/
+    .xlsm, or an HTML table saved with a .xls extension - all
+    auto-detected) and return the (PPID, Parameter, Reference Value)
     columns as raw tuples.
 
     Production files may carry extra columns beyond the three that matter -
@@ -51,11 +88,14 @@ def read_raw_rows(file_bytes: bytes) -> list[tuple[Any, Any, Any]]:
     positional assumption when headers aren't recognizable) and everything
     else is ignored.
     """
-    engine = detect_excel_engine(file_bytes)
-    try:
-        df = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine=engine)
-    except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
-        raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
+    if _looks_like_html(file_bytes):
+        df = _read_html_table(file_bytes)
+    else:
+        engine = detect_excel_engine(file_bytes)
+        try:
+            df = pd.read_excel(BytesIO(file_bytes), sheet_name=0, header=0, engine=engine)
+        except Exception as exc:  # noqa: BLE001 - surfaced as a clean 400 to the client
+            raise InvalidExcelFormatError(f"Could not read uploaded file as Excel: {exc}") from exc
 
     ppid_col, parameter_col, value_col = _resolve_input_columns(df)
     subset = df[[ppid_col, parameter_col, value_col]]
