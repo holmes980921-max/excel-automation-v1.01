@@ -1,7 +1,23 @@
 "use client";
 
-import { AppBar, Toolbar, Typography, Button, IconButton, InputBase, Box, Tooltip } from "@mui/material";
-import { Upload, Download, SlidersHorizontal, Search, Settings } from "lucide-react";
+import { useState } from "react";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Button,
+  IconButton,
+  InputBase,
+  Box,
+  Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
+  Switch,
+  Divider,
+} from "@mui/material";
+import { Upload, Download, SlidersHorizontal, Search, Settings, Info } from "lucide-react";
 
 type Props = {
   onUploadClick: () => void;
@@ -11,6 +27,11 @@ type Props = {
   onToggleRules: () => void;
   searchValue: string;
   onSearchChange: (value: string) => void;
+  showAdvanced: boolean;
+  onToggleAdvanced: () => void;
+  debugMode: boolean;
+  onToggleDebugMode: () => void;
+  onOpenAbout: () => void;
 };
 
 export default function AppToolbar({
@@ -21,12 +42,19 @@ export default function AppToolbar({
   onToggleRules,
   searchValue,
   onSearchChange,
+  showAdvanced,
+  onToggleAdvanced,
+  debugMode,
+  onToggleDebugMode,
+  onOpenAbout,
 }: Props) {
+  const [settingsAnchor, setSettingsAnchor] = useState<HTMLElement | null>(null);
+
   return (
     <AppBar position="static" color="default" elevation={0} sx={{ borderBottom: "1px solid #e0e0e0" }}>
       <Toolbar variant="dense" sx={{ gap: 1 }}>
         <Typography variant="subtitle1" sx={{ mr: 2, whiteSpace: "nowrap", fontWeight: 700 }}>
-          Excel Automation V1.03
+          Excel Automation
         </Typography>
 
         <Button size="small" startIcon={<Upload size={16} />} onClick={onUploadClick}>
@@ -35,15 +63,17 @@ export default function AppToolbar({
         <Button size="small" startIcon={<Download size={16} />} onClick={onDownloadClick} disabled={downloadDisabled}>
           Download
         </Button>
-        <Button
-          size="small"
-          startIcon={<SlidersHorizontal size={16} />}
-          onClick={onToggleRules}
-          variant={rulesOpen ? "contained" : "text"}
-          disableElevation
-        >
-          Transformation Rules
-        </Button>
+        {showAdvanced && (
+          <Button
+            size="small"
+            startIcon={<SlidersHorizontal size={16} />}
+            onClick={onToggleRules}
+            variant={rulesOpen ? "contained" : "text"}
+            disableElevation
+          >
+            Transformation Rules
+          </Button>
+        )}
 
         <Box
           sx={{
@@ -66,10 +96,38 @@ export default function AppToolbar({
         </Box>
 
         <Tooltip title="Settings">
-          <IconButton size="small">
+          <IconButton size="small" onClick={(e) => setSettingsAnchor(e.currentTarget)}>
             <Settings size={18} />
           </IconButton>
         </Tooltip>
+        <Menu anchorEl={settingsAnchor} open={!!settingsAnchor} onClose={() => setSettingsAnchor(null)}>
+          <MenuItem onClick={onToggleAdvanced}>
+            <ListItemIcon>
+              <SlidersHorizontal size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Show Advanced Features" secondary="Transformation Rule Editor" />
+            <Switch edge="end" size="small" checked={showAdvanced} />
+          </MenuItem>
+          <MenuItem onClick={onToggleDebugMode}>
+            <ListItemIcon>
+              <Settings size={16} />
+            </ListItemIcon>
+            <ListItemText primary="Debug Mode" secondary="Timing, memory, engine diagnostics" />
+            <Switch edge="end" size="small" checked={debugMode} />
+          </MenuItem>
+          <Divider />
+          <MenuItem
+            onClick={() => {
+              setSettingsAnchor(null);
+              onOpenAbout();
+            }}
+          >
+            <ListItemIcon>
+              <Info size={16} />
+            </ListItemIcon>
+            <ListItemText primary="About" />
+          </MenuItem>
+        </Menu>
       </Toolbar>
     </AppBar>
   );

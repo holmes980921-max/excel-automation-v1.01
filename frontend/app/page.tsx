@@ -9,6 +9,7 @@ import AppToolbar from "@/components/AppToolbar";
 import StatusBar from "@/components/StatusBar";
 import RuleEditor from "@/components/RuleEditor";
 import ExcelGrid from "@/components/ExcelGrid";
+import AboutDialog from "@/components/AboutDialog";
 import UploadDialog, { type ConvertResponse } from "@/components/UploadDialog";
 import { exportRows, downloadBase64File } from "@/lib/api";
 import {
@@ -26,6 +27,8 @@ import {
 } from "@/lib/rules";
 
 const STATUS_MESSAGE_DURATION_MS = 4000;
+const SHOW_ADVANCED_KEY = "excel-automation.showAdvanced.v1";
+const DEBUG_MODE_KEY = "excel-automation.debugMode.v1";
 
 export default function Home() {
   const [result, setResult] = useState<ConvertResponse | null>(null);
@@ -34,7 +37,13 @@ export default function Home() {
   const [draft, setDraft] = useState<TransformationRule>(() => normalizeForEditing(DEFAULT_RULE));
 
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(true);
+  // Hidden by default (V1.05: "simplify the interface for everyday users
+  // while preserving advanced functionality") - loaded from localStorage
+  // post-mount, same hydration-safety pattern as the rules below.
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [filteredCount, setFilteredCount] = useState(0);
   const [downloading, setDownloading] = useState(false);
@@ -53,16 +62,34 @@ export default function Home() {
     if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
   }, []);
 
-  // Load persisted rules only on the client, after mount (localStorage is unavailable
-  // during SSR) - avoids a hydration mismatch on first paint.
+  // Load persisted rules/preferences only on the client, after mount
+  // (localStorage is unavailable during SSR) - avoids a hydration mismatch.
   useEffect(() => {
     const id = getActiveRuleId();
     setRules(listRules());
     setActiveRuleIdState(id);
     setDraft(normalizeForEditing(getRuleById(id)));
+    setShowAdvanced(window.localStorage.getItem(SHOW_ADVANCED_KEY) === "true");
+    setDebugMode(window.localStorage.getItem(DEBUG_MODE_KEY) === "true");
   }, []);
 
   const refreshRules = useCallback(() => setRules(listRules()), []);
+
+  const handleToggleAdvanced = useCallback(() => {
+    setShowAdvanced((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(SHOW_ADVANCED_KEY, String(next));
+      return next;
+    });
+  }, []);
+
+  const handleToggleDebugMode = useCallback(() => {
+    setDebugMode((prev) => {
+      const next = !prev;
+      window.localStorage.setItem(DEBUG_MODE_KEY, String(next));
+      return next;
+    });
+  }, []);
 
   const handleConverted = useCallback(
     (data: ConvertResponse) => {
@@ -134,6 +161,7 @@ export default function Home() {
   }, [result, draft, showStatusMessage]);
 
   const displayColumns = resolveDisplayColumns(draft);
+  const showRulePanel = showAdvanced && rulesOpen;
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw" }}>
@@ -145,10 +173,15 @@ export default function Home() {
         onToggleRules={() => setRulesOpen((v) => !v)}
         searchValue={searchValue}
         onSearchChange={setSearchValue}
+        showAdvanced={showAdvanced}
+        onToggleAdvanced={handleToggleAdvanced}
+        debugMode={debugMode}
+        onToggleDebugMode={handleToggleDebugMode}
+        onOpenAbout={() => setAboutOpen(true)}
       />
 
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {rulesOpen && (
+        {showRulePanel && (
           <Box sx={{ width: 340, flexShrink: 0, borderRight: "1px solid #e0e0e0", background: "#fff" }}>
             <RuleEditor
               draft={draft}
@@ -202,10 +235,18 @@ export default function Home() {
         currentRuleName={draft.rule_name}
         ppidCount={result?.summary.ppid_count}
         conversionTimeSeconds={result?.summary.conversion_time_seconds}
+        debugPeakMemoryMb={debugMode ? result?.debug?.peak_memory_mb : undefined}
+        debugEngineUsed={debugMode ? result?.debug?.engine_used : undefined}
         statusMessage={statusMessage}
       />
 
-      <UploadDialog open={uploadOpen} onClose={() => setUploadOpen(false)} onConverted={handleConverted} />
+      <UploadDialog
+        open={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onConverted={handleConverted}
+        debugMode={debugMode}
+      />
+      <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </Box>
   );
 }

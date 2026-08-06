@@ -10,6 +10,9 @@ type Props = {
   currentRuleName: string;
   ppidCount?: number;
   conversionTimeSeconds?: number;
+  /** Only populated when Debug Mode is on (see Settings menu) - never shown otherwise. */
+  debugPeakMemoryMb?: number;
+  debugEngineUsed?: string;
   /** Transient success feedback (e.g. "Saved rule ..."). Errors/warnings use
    * toasts instead - see AppProviders' <Toaster />. */
   statusMessage?: string | null;
@@ -30,6 +33,8 @@ export default function StatusBar({
   currentRuleName,
   ppidCount,
   conversionTimeSeconds,
+  debugPeakMemoryMb,
+  debugEngineUsed,
   statusMessage,
 }: Props) {
   return (
@@ -53,6 +58,8 @@ export default function StatusBar({
         {conversionTimeSeconds !== undefined && (
           <Stat label="Conversion Time" value={`${conversionTimeSeconds.toFixed(2)} sec`} />
         )}
+        {debugPeakMemoryMb !== undefined && <Stat label="Peak Memory" value={`${debugPeakMemoryMb.toFixed(1)} MB`} />}
+        {debugEngineUsed !== undefined && <Stat label="Engine" value={debugEngineUsed} />}
       </Stack>
 
       {/* Always shows something here: the transient success message while
