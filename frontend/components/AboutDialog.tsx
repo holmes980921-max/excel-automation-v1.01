@@ -33,10 +33,10 @@ export default function AboutDialog({ open, onClose }: Props) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>About Excel Automation</DialogTitle>
+      <DialogTitle>About RCC Excel Automation</DialogTitle>
       <DialogContent>
         <Stack spacing={1}>
-          <Row label="Application Name" value="Excel Automation" />
+          <Row label="Application Name" value="RCC Excel Automation" />
           <Row label="Version" value={FRONTEND_VERSION} />
           <Row label="Git Tag" value={GIT_TAG} />
           <Row label="Build Date" value={BUILD_DATE} />

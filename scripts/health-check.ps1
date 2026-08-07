@@ -1,4 +1,4 @@
-# Excel Automation - health check
+# RCC Excel Automation - health check
 #
 # Quick standalone check of whether both servers are up and responding,
 # without starting or stopping anything. Useful for verifying a `run.ps1`

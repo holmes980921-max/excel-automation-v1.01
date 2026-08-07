@@ -1,4 +1,4 @@
-# Excel Automation - one-click run
+# RCC Excel Automation - one-click run
 #
 # Validates the environment, installs anything missing, starts both the
 # backend and frontend dev servers (each in its own window so their logs
@@ -111,7 +111,7 @@ if ($frontendOk) { Write-Ok "Frontend healthy" } else { Write-Fail "Frontend did
 
 if ($backendOk -and $frontendOk) {
     Write-Host ""
-    Write-Host "Excel Automation is running:" -ForegroundColor Green
+    Write-Host "RCC Excel Automation is running:" -ForegroundColor Green
     Write-Host "  Frontend: http://localhost:3000"
     Write-Host "  Backend:  http://127.0.0.1:8000"
     Write-Host "(Each server is running in its own window - close those windows to stop them.)"

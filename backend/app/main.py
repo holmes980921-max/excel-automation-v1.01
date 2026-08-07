@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Excel Automation - FastAPI entry point.
+"""RCC Excel Automation - FastAPI entry point.
 
 Security notes (see project spec):
 - No uploaded file is ever written to disk (all processing is in-memory).
@@ -18,9 +18,9 @@ from app.utils.logging_config import configure_logging, get_logger
 configure_logging(debug_mode=False)
 error_log = get_logger("error")
 
-APP_VERSION = "1.8.0"
+APP_VERSION = "1.9.0"
 
-app = FastAPI(title="Excel Automation", version=APP_VERSION)
+app = FastAPI(title="RCC Excel Automation", version=APP_VERSION)
 
 app.add_middleware(
     CORSMiddleware,

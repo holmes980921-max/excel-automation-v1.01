@@ -4,7 +4,7 @@ import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-appRouter";
 import AppProviders from "@/components/AppProviders";
 
 export const metadata: Metadata = {
-  title: "Excel Automation",
+  title: "RCC Excel Automation",
   description: "Configurable Excel transformation tool with a rule editor and Excel-style preview grid.",
 };
 

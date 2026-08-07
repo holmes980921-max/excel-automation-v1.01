@@ -1,4 +1,4 @@
-# Excel Automation - one-click update
+# RCC Excel Automation - one-click update
 #
 # Pulls the latest changes on the current branch and reinstalls any changed
 # dependencies. Safe to run any time - does not touch uncommitted changes
