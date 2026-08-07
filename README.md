@@ -1,18 +1,22 @@
-# Excel Automation
+# RCC Excel Automation
 
 A local, configurable Excel transformation tool. It converts a PPID / Parameter / Reference
 Value excel export into a flat table - one row per `TS#` block - and lets you customize which
 columns appear, in what order, and under what display name, entirely through the UI (no code
 changes required).
 
-**Current version: V1.08** (see the in-app **About** dialog, under the Settings menu, for the
+> Renamed from "Excel Automation" to "RCC Excel Automation" in V1.09 (branding only - no behavior
+> change). Older per-version reports (`CODE_REVIEW_V1.0X.md`, etc.) keep their original title as a
+> historical record and are not retroactively renamed.
+
+**Current version: V1.09** (see the in-app **About** dialog, under the Settings menu, for the
 live version/build info - the header intentionally no longer hardcodes a version string)
 
 ## Quick Start (Windows)
 
 ```
 1. Double-click run.bat
-2. Wait for "Excel Automation is running"
+2. Wait for "RCC Excel Automation is running"
 3. Open http://localhost:3000
 ```
 
@@ -22,6 +26,25 @@ manual setup required. See [Developer Experience](#developer-experience) below f
 [Troubleshooting](#troubleshooting) if something doesn't come up.
 
 ## Features
+
+### Support & Usability (V1.09)
+- **Renamed to RCC Excel Automation** - applied to the browser title, header, Home screen,
+  README, and CHANGELOG.
+- **Fixed: Home now fully resets the session.** Previously, the active Transformation Rule and a
+  transient status message could survive a Home reset, even though the converted data itself was
+  cleared - clicking Home now returns everything (uploaded file, pasted data, preview, search,
+  Description, workflow badges, status bar, and the active rule) to the literal initial state.
+- **Remove / Clear before converting** - a selected file (Upload panel) or pasted data (Paste
+  panel) can now be discarded with one click before Convert, instead of only being replaceable by
+  picking something else. The same Remove affordance was added to the Add Description dialog for
+  consistency.
+- **Error Log Viewer** - an unexpected error now offers **Show Log**, revealing a timestamp,
+  application version, operation, error message/stack trace, and environment info, with a
+  one-click **Copy Log** and a developer contact - everything needed to file a useful bug report,
+  and nothing about your converted data.
+- **Release Notes** - a toolbar button opens an in-app changelog (New / Improved / Fixed / Known
+  Issues per version), the primary place future updates get communicated.
+- See [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md) for the full assessment.
 
 ### Production Readiness & Stability (V1.08)
 - **No new functionality by design** - this release is entirely stabilization: refactoring,
@@ -173,10 +196,10 @@ cd backend
 ./.venv/Scripts/pip install -r requirements-dev.txt
 ./.venv/Scripts/python.exe -m pytest                              # or: pytest --cov=app --cov-report=term-missing
 
-# Frontend (Vitest, 64 tests)
+# Frontend (Vitest, 82 tests)
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
-npm run lint                                                        # ESLint (new in V1.08)
+npm run lint                                                        # ESLint (added in V1.08)
 ```
 
 ### Debug Mode
@@ -206,12 +229,16 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
    clears the other, so there's never ambiguity about which input Convert will use. A large paste
    (~200,000+ rows) shows a "Clipboard Loaded" summary instead of the raw text - see
    [Troubleshooting](#troubleshooting).
-3. Click **Convert**. A processing overlay shows progress; click **Abort** if you need to cancel
+3. Selected the wrong file, or pasted the wrong range? Click **Remove** (Upload) or **Clear**
+   (Paste) to discard it and start over, without needing to convert or navigate away first.
+4. Click **Convert**. A processing overlay shows progress; click **Abort** if you need to cancel
    (a confirmation appears before anything is actually discarded).
-4. Once converted, you're on the Preview screen - the toolbar now shows Quick Save/Save As/Add
+5. Once converted, you're on the Preview screen - the toolbar now shows Quick Save/Save As/Add
    Description/Preview Rows/Search, and workflow badges confirm what's been done.
-5. Click **Home** (top-left) at any time to start over with a different file - if you have an
-   active conversion, you'll be asked to confirm first.
+6. Click **Home** (top-left) at any time to start over with a different file - if you have an
+   active conversion, you'll be asked to confirm first. Home always returns the entire application
+   to its initial state (V1.09) - nothing from the previous session (data, search, the active
+   Transformation Rule, status messages) carries over.
 
 ## Rule Editor Guide
 
@@ -242,6 +269,23 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
    conversion (never stacks onto a previous merge) - so switching description files is safe.
 6. `DESC` rides along on **Quick Save**/**Save As** regardless of which Transformation Rule is
    active, since it isn't part of the rule-shapeable column set.
+
+## Reporting a Problem
+
+If something unexpected happens (a genuine bug, not a validation message like "File is too
+large"), the app shows a recovery screen with a **Show Log** button. That opens a plain-text log
+(timestamp, app version, operation, error message/stack trace, environment info) with a **Copy
+Log** button - paste it into your bug report along with what you were doing. The log never
+includes any converted data (PPID/excel content) - only technical/environment details. A developer
+contact (`jong10k.kim`) is shown in the same dialog.
+
+## Release Notes
+
+Click **Release Notes** in the toolbar (always available, including from the Home screen) for an
+in-app changelog - every version's New / Improved / Fixed / Known Issues, most recent expanded
+first. This is the primary place future updates are communicated; see
+[`frontend/lib/releaseNotes.ts`](./frontend/lib/releaseNotes.ts) if you're adding an entry for a
+new version.
 
 ## Rule JSON Specification
 
@@ -353,8 +397,20 @@ Abort cancels the browser's request immediately (the UI returns to Home right aw
 in-flight response is discarded when it eventually arrives) - it does not interrupt the backend's
 in-progress computation, which keeps running to completion server-side and simply has its result
 ignored. At this app's target scale (sub-2s conversions, per the V1.05 benchmark) this is not
-user-visible; a real server-side cancellation mechanism is recommended for V1.09+ (see
-[CODE_REVIEW_V1.08.md](./CODE_REVIEW_V1.08.md)).
+user-visible; a real server-side cancellation mechanism remains a disclosed future item (see
+[CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md)'s Future Improvements).
+
+**I accidentally selected the wrong file or pasted the wrong data.**
+Click **Remove** (next to the selected file) or **Clear** (next to the Clipboard Loaded summary)
+to discard it before converting - see step 3 of the [Home Screen Guide](#home-screen-guide). The
+same applies to the Description file in the Add Description dialog.
+
+**Clicking Home doesn't seem to fully reset things.**
+This was a real bug, fixed in V1.09 - Home now resets the uploaded file/pasted data, preview,
+search, Add Description result, status badges, status bar message, and the active Transformation
+Rule together. If you still see something carry over after a Home reset on the current version,
+please report it via the [Error Log Viewer](#reporting-a-problem) if an error dialog appeared, or
+otherwise as a plain bug report - this would be a regression.
 
 **Pasting a very large range (~200,000+ rows) shows a summary instead of the pasted text.**
 This is intentional (V1.08) - pasting that much text directly into a rendered textarea used to
@@ -386,6 +442,7 @@ excel-automation-v1.01/
 ├── PERFORMANCE_REPORT_V1.08.md     # Large-paste freeze root cause/fix + pipeline profiling
 ├── DEPENDENCY_AUDIT_V1.08.md       # Missing/unused dependency findings incl. the psutil clean-install bug
 ├── TEST_COVERAGE_V1.08.md          # Backend/frontend coverage breakdown
+├── CODE_REVIEW_V1.09.md            # V1.09 review + score (Home reset fix, Remove/Clear, Error Log, Release Notes)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app entry, CORS, logging setup, global exception handler
@@ -417,14 +474,16 @@ excel-automation-v1.01/
     │   └── globals.css
     ├── components/
     │   ├── AppProviders.tsx           # MUI theme + Sonner toaster + ErrorBoundary wrapper
-    │   ├── ErrorBoundary.tsx          # V1.08: top-level UI recovery after an unexpected render error
-    │   ├── AppToolbar.tsx             # Home / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
+    │   ├── ErrorBoundary.tsx          # Top-level UI recovery after an unexpected render error; V1.09: Show Log
+    │   ├── ErrorLogDialog.tsx         # V1.09: timestamp/version/operation/message/stack/env + Copy Log + dev contact
+    │   ├── ReleaseNotesDialog.tsx     # V1.09: New/Improved/Fixed/Known Issues per version
+    │   ├── AppToolbar.tsx             # Home / Release Notes / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
     │   ├── StatusBar.tsx              # Rows/Columns/matches/Rule + Description stats + completion feedback + Debug metrics
     │   ├── WorkflowBadges.tsx         # V1.07: Converted / Description Applied / Ready to Save status strip
     │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA, Abort
     │   ├── AboutDialog.tsx            # App name/version/git tag/build date/backend+frontend framework
-    │   ├── HomeScreen.tsx             # Application entry point - drag & drop / paste / Convert; large-paste freeze fixed in V1.08
-    │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID
+    │   ├── HomeScreen.tsx             # Application entry point - drag & drop / paste / Convert; V1.09: Remove/Clear before converting
+    │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID; V1.09: Remove selected file
     │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
     │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
     │   ├── AbortConfirmDialog.tsx     # V1.07: confirm before cancelling an in-flight conversion
@@ -438,10 +497,12 @@ excel-automation-v1.01/
     │   ├── searchFilter.ts            # V1.06: pure row-search predicate (search always runs on the full dataset)
     │   ├── filename.ts                # V1.06: default save filename (RCC_converted_YYMMDD_HHMMSS.xlsx)
     │   ├── pasteSummary.ts            # V1.08: lightweight row/column summary for a large paste, never renders the raw text
+    │   ├── errorLog.ts                # V1.09: builds/formats the Error Log Viewer's plain-text log entry
+    │   ├── releaseNotes.ts            # V1.09: Release Notes content - add one entry here per future version
     │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE for the About dialog
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
     ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 64 tests
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 82 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -489,6 +550,12 @@ concerns independent and separately testable.
   [CODE_REVIEW_V1.08.md](./CODE_REVIEW_V1.08.md) (scored **A**),
   [PERFORMANCE_REPORT_V1.08.md](./PERFORMANCE_REPORT_V1.08.md),
   [DEPENDENCY_AUDIT_V1.08.md](./DEPENDENCY_AUDIT_V1.08.md), and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.09** - Support & usability: renamed to RCC Excel Automation; fixed a real bug where Home
+  didn't fully reset the session (the active Transformation Rule and status message could carry
+  over); added Remove/Clear for an accidental upload or paste before converting; added an Error
+  Log Viewer (Show Log / Copy Log / developer contact) for unexpected errors; added an in-app
+  Release Notes page. See [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md) and
+  [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -532,3 +599,10 @@ the `v1.07` git tag (confirmed by diff). The two internal refactors this version
 the full test suite before and after, plus a live end-to-end smoke test confirming
 `PPID | DESC | TS# | ...` ordering is unchanged. No output-affecting behavior changed this version
 by design - V1.08 is explicitly scoped to stabilization, not features.
+
+**V1.09**: `excel_transformer.py`, `constants.py`, `rule_manager.py`, and every other backend
+service file remain byte-identical to the `v1.08` git tag (confirmed by diff) - the only backend
+change this version is a 2-line branding string in `main.py`. No conversion output changed. The
+Home-reset fix and Remove/Clear additions are frontend-only session-state changes, verified by a
+new `frontend/app/page.test.tsx` regression test that specifically reproduces the fixed bug
+(customize a rule, reset via Home, reconvert, assert the rule is back to Default).

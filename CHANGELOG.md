@@ -1,5 +1,66 @@
 # Changelog
 
+> Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
+> below for earlier versions use the name in effect at the time.
+
+## v1.09 - Support & Usability
+
+### Release Notes
+
+V1.09 focuses on reducing user confusion and making the app easier to support after deployment -
+no new business features or conversion-logic changes, per its own spec. It fixes a real bug: Home
+was supposed to fully reset the session, but the active Transformation Rule and a transient status
+message could survive the reset, so a customized rule from a discarded session could silently
+apply to an unrelated new conversion. Users can now back out of an accidental upload or paste
+before converting (Remove / Clear), matching a pattern that already existed for large pastes.
+The app is renamed to **RCC Excel Automation** across the browser title, header, Home screen,
+README, and CHANGELOG. Unexpected errors now offer a **Show Log** action (timestamp, app version,
+operation, error message/stack trace, environment info, one-click Copy Log, and a developer
+contact) instead of just a generic message. A **Release Notes** page is now the primary in-app
+place future updates get communicated. Full detail: [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md).
+
+### Fixed
+- **Home didn't fully reset the session.** `resetSession()` cleared the converted data (result,
+  Add Description, search, Preview Rows) but left the active Transformation Rule and any pending
+  status-bar message behind. Split into `resetSession()` (data only, used on every fresh
+  conversion) and `resetToInitialState()` (data + the active rule reset to Default + status
+  message cleared, used only when the user explicitly confirms Home) - the rule remains a
+  persistent preference across conversions within a session (by design since V1.03), but Home
+  itself now genuinely returns the app to its initial state. `frontend/app/page.tsx`.
+
+### Added
+- **Remove** (Upload panel) and the existing **Clear** (Paste panel) let a user discard an
+  accidental selection before converting - both now show a "Selected File"/"Clipboard Loaded"
+  card with the same visual pattern, applied consistently to `HomeScreen.tsx` and
+  `AddDescriptionDialog.tsx`.
+- **Error Log Viewer**: `ErrorBoundary`'s recovery screen gained a **Show Log** button opening
+  `ErrorLogDialog.tsx` - timestamp, application version, operation, error message, stack trace,
+  and environment info (user agent, viewport size), formatted as easy-to-copy plain text via
+  **Copy Log**, with a developer contact (`jong10k.kim`). Never includes application data
+  (PPID/excel content) - see `frontend/lib/errorLog.ts`.
+- **Release Notes**: a new toolbar button (always visible) opens `ReleaseNotesDialog.tsx`, showing
+  every version's New/Improved/Fixed/Known Issues from `frontend/lib/releaseNotes.ts` (most recent
+  expanded by default). Future versions only need to add one entry there.
+- `frontend/app/page.test.tsx` - a new regression test suite for `page.tsx` (previously untested
+  despite being flagged as the largest stateful component in every review since V1.05),
+  specifically reproducing the Home-reset bug and asserting the fix.
+- Tests for the new Remove/Clear, Error Log Viewer, and Release Notes behavior across
+  `HomeScreen.test.tsx`, `AddDescriptionDialog.test.tsx` (new - this component had no dedicated
+  tests before), `ErrorBoundary.test.tsx`, `errorLog.test.ts` (new), and `ReleaseNotesDialog.test.tsx`
+  (new).
+
+### Changed
+- Renamed "Excel Automation" to "**RCC Excel Automation**" - browser title, toolbar header, Home
+  screen heading, About dialog, backend FastAPI title, README, CHANGELOG, and the one-click
+  run/update/health-check scripts' console output.
+
+### Known limitations (disclosed, not fixed this version)
+- Abort remains client-side only (unchanged from V1.07/V1.08) - see Future Improvements in
+  `CODE_REVIEW_V1.09.md`.
+- The Transformation Rule shaping logic remains intentionally duplicated between
+  `rule_manager.py`/`lib/rules.ts` (a reviewed trade-off documented in `CODE_REVIEW_V1.08.md`, not
+  revisited this version since it's out of this release's scope).
+
 ## v1.08 - Production Readiness & Stability
 
 ### Release Notes
