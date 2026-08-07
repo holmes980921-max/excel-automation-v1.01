@@ -10,6 +10,7 @@ import WorkflowBadges from "@/components/WorkflowBadges";
 import RuleEditor from "@/components/RuleEditor";
 import ExcelGrid from "@/components/ExcelGrid";
 import AboutDialog from "@/components/AboutDialog";
+import ReleaseNotesDialog from "@/components/ReleaseNotesDialog";
 import HomeScreen from "@/components/HomeScreen";
 import ReturnHomeDialog from "@/components/ReturnHomeDialog";
 import AddDescriptionDialog from "@/components/AddDescriptionDialog";
@@ -52,6 +53,7 @@ export default function Home() {
 
   const [addDescriptionOpen, setAddDescriptionOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [homeConfirmOpen, setHomeConfirmOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(true);
   // Hidden by default (V1.05: "simplify the interface for everyday users
@@ -109,14 +111,33 @@ export default function Home() {
     });
   }, []);
 
-  // Shared by both a fresh conversion (clears any prior session first) and
-  // the Home-navigation confirm (discards the session entirely).
+  // Clears converted data before a fresh conversion replaces it - the
+  // Transformation Rule is *not* touched here, since it's a persistent
+  // user preference (saved/switchable, survives across conversions by
+  // design since V1.03), not per-conversion session data.
   const resetSession = useCallback(() => {
     setResult(null);
     setDescResult(null);
     setSearchValue("");
     setPreviewLimit(DEFAULT_PREVIEW_LIMIT);
+    if (statusTimeoutRef.current) clearTimeout(statusTimeoutRef.current);
+    setStatusMessage(null);
   }, []);
+
+  // V1.09 bug fix: clicking Home is supposed to return the application to
+  // its literal initial state, not just discard the converted data. The
+  // active Transformation Rule was previously left behind - customizing a
+  // rule, then going Home and starting an unrelated new conversion, would
+  // silently apply the old rule's shaping to data it was never chosen for.
+  // Only the explicit "return home" action resets this (not every
+  // conversion - see resetSession above), since a rule is otherwise meant
+  // to persist across conversions within a session.
+  const resetToInitialState = useCallback(() => {
+    resetSession();
+    setActiveRuleIdState(DEFAULT_RULE.id);
+    persistActiveRuleId(DEFAULT_RULE.id);
+    setDraft(normalizeForEditing(DEFAULT_RULE));
+  }, [resetSession]);
 
   const handleConverted = useCallback(
     (data: ConvertResponse) => {
@@ -143,9 +164,9 @@ export default function Home() {
   }, [result]);
 
   const handleConfirmGoHome = useCallback(() => {
-    resetSession();
+    resetToInitialState();
     setHomeConfirmOpen(false);
-  }, [resetSession]);
+  }, [resetToInitialState]);
 
   const handleSelectRule = useCallback((id: string) => {
     setActiveRuleIdState(id);
@@ -293,6 +314,7 @@ export default function Home() {
         debugMode={debugMode}
         onToggleDebugMode={handleToggleDebugMode}
         onOpenAbout={() => setAboutOpen(true)}
+        onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
         previewLimit={previewLimit}
         onPreviewLimitChange={handlePreviewLimitRequest}
         onAddDescriptionClick={() => setAddDescriptionOpen(true)}
@@ -365,6 +387,7 @@ export default function Home() {
         onStay={() => setHomeConfirmOpen(false)}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <ReleaseNotesDialog open={releaseNotesOpen} onClose={() => setReleaseNotesOpen(false)} />
     </Box>
   );
 }
