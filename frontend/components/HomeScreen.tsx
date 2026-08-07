@@ -91,6 +91,13 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     setPastedText("");
   };
 
+  // V1.09: lets a user back out of an accidental upload before converting,
+  // without needing to drop a replacement file or navigate away.
+  const handleRemoveFile = () => {
+    setFile(null);
+    setError(null);
+  };
+
   const handleConvert = async () => {
     if (loading) return; // belt-and-suspenders against a duplicate in-flight request
     const pasteText = pasteSummary ? rawPasteTextRef.current : pastedText;
@@ -160,51 +167,81 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
 
       <Box sx={{ width: "100%", maxWidth: 860 }}>
         <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2 }}>
-          Excel Automation
+          RCC Excel Automation
         </Typography>
         <Divider sx={{ mb: 4 }} />
 
         <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-          <Box
-            {...getRootProps()}
-            sx={{
-              flex: "1 1 320px",
-              border: "2px dashed",
-              borderColor: dropzoneBorderColor,
-              borderRadius: 2,
-              p: 4,
-              textAlign: "center",
-              cursor: loading ? "default" : "pointer",
-              background: dropzoneBackground,
-              transition: "border-color 0.15s ease, background 0.15s ease",
-            }}
-          >
-            <input {...getInputProps()} />
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-              Upload
-            </Typography>
-            <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
-              {isDragReject ? (
-                <XCircle size={32} color="#d32f2f" />
-              ) : file ? (
-                <FileSpreadsheet size={32} color="#2e7d32" />
-              ) : (
-                <UploadCloud size={32} />
-              )}
-            </Box>
-            <Typography color={isDragReject ? "error" : "text.secondary"} sx={{ mb: 0.5 }}>
-              {isDragReject
-                ? "This file type isn't supported"
-                : file
-                  ? <strong>{file.name}</strong>
-                  : isDragActive
-                    ? "Drop the file here"
-                    : "Drag & Drop Excel"}
-            </Typography>
-            {!file && !isDragReject && (
-              <Typography variant="caption" color="text.secondary">
-                or click to Browse File
-              </Typography>
+          <Box sx={{ flex: "1 1 320px" }}>
+            {file ? (
+              // Matches the Paste panel's "Clipboard Loaded" card for
+              // consistency (V1.09) - both give an explicit way to back
+              // out of an accidental selection before converting.
+              <Box
+                sx={{
+                  border: "2px dashed",
+                  borderColor: "success.main",
+                  borderRadius: 2,
+                  background: "rgba(46, 125, 50, 0.06)",
+                  p: 4,
+                }}
+              >
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, textAlign: "center" }}>
+                  Upload
+                </Typography>
+                <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                      <FileSpreadsheet size={16} color="#2e7d32" />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        Selected File
+                      </Typography>
+                    </Box>
+                    <Tooltip title="Remove">
+                      <IconButton size="small" aria-label="Remove" onClick={handleRemoveFile} disabled={loading}>
+                        <X size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                    {file.name}
+                  </Typography>
+                </Box>
+              </Box>
+            ) : (
+              <Box
+                {...getRootProps()}
+                sx={{
+                  border: "2px dashed",
+                  borderColor: dropzoneBorderColor,
+                  borderRadius: 2,
+                  p: 4,
+                  textAlign: "center",
+                  cursor: loading ? "default" : "pointer",
+                  background: dropzoneBackground,
+                  transition: "border-color 0.15s ease, background 0.15s ease",
+                }}
+              >
+                <input {...getInputProps()} />
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+                  Upload
+                </Typography>
+                <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
+                  {isDragReject ? <XCircle size={32} color="#d32f2f" /> : <UploadCloud size={32} />}
+                </Box>
+                <Typography color={isDragReject ? "error" : "text.secondary"} sx={{ mb: 0.5 }}>
+                  {isDragReject
+                    ? "This file type isn't supported"
+                    : isDragActive
+                      ? "Drop the file here"
+                      : "Drag & Drop Excel"}
+                </Typography>
+                {!isDragReject && (
+                  <Typography variant="caption" color="text.secondary">
+                    or click to Browse File
+                  </Typography>
+                )}
+              </Box>
             )}
           </Box>
 

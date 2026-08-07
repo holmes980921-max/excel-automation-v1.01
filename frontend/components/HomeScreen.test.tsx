@@ -159,4 +159,56 @@ describe("HomeScreen", () => {
       expect(toastErrorSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe("Remove selected file (V1.09)", () => {
+    function selectFile(container: HTMLElement, file: File) {
+      const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input, { target: { files: [file] } });
+    }
+
+    it("shows a Selected File card with a Remove action once a file is chosen", async () => {
+      const { container } = render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      const file = new File(["dummy"], "sample.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      selectFile(container, file);
+
+      // react-dropzone validates/processes the selected file asynchronously.
+      expect(await screen.findByText("sample.xlsx")).toBeInTheDocument();
+      expect(screen.getByText("Selected File")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /convert/i })).not.toBeDisabled();
+    });
+
+    it("Remove clears the selection and restores the empty upload dropzone", async () => {
+      const { container } = render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      const file = new File(["dummy"], "sample.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      selectFile(container, file);
+      expect(await screen.findByText("sample.xlsx")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /remove/i }));
+
+      expect(screen.queryByText("sample.xlsx")).not.toBeInTheDocument();
+      expect(screen.getByText(/drag & drop excel/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /convert/i })).toBeDisabled();
+    });
+
+    it("converts using the selected file after it survives to Convert", async () => {
+      vi.mocked(convertFile).mockResolvedValue(RESPONSE);
+      const onConverted = vi.fn();
+      const { container } = render(<HomeScreen onConverted={onConverted} debugMode={false} />);
+      const file = new File(["dummy"], "sample.xlsx", {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      selectFile(container, file);
+      await screen.findByText("sample.xlsx");
+
+      fireEvent.click(screen.getByRole("button", { name: /convert/i }));
+
+      await waitFor(() => expect(onConverted).toHaveBeenCalledWith(RESPONSE));
+      expect(convertFile).toHaveBeenCalledWith(file, false, expect.any(AbortSignal));
+      expect(convertText).not.toHaveBeenCalled();
+    });
+  });
 });

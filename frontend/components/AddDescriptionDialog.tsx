@@ -2,8 +2,18 @@
 
 import { useCallback, useState } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography } from "@mui/material";
-import { FileSpreadsheet, UploadCloud, XCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Box,
+  Typography,
+  IconButton,
+  Tooltip,
+} from "@mui/material";
+import { FileSpreadsheet, UploadCloud, XCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { addDescription, type AddDescriptionResponse } from "@/lib/api";
 import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
@@ -67,6 +77,14 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
     onClose();
   };
 
+  // V1.09: matches the Home screen's Selected File / Remove pattern for
+  // consistency - lets the user back out of an accidental selection here
+  // too, without closing and reopening the dialog.
+  const handleRemoveFile = () => {
+    setFile(null);
+    setError(null);
+  };
+
   const dropzoneBorderColor = isDragReject ? "error.main" : isDragAccept ? "success.main" : "divider";
   const dropzoneBackground = isDragReject
     ? "rgba(211, 47, 47, 0.06)"
@@ -85,39 +103,62 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
           PPID matches - rows with no match are left as is.
         </Typography>
 
-        <Box
-          {...getRootProps()}
-          sx={{
-            border: "2px dashed",
-            borderColor: dropzoneBorderColor,
-            borderRadius: 2,
-            p: 4,
-            textAlign: "center",
-            cursor: loading ? "default" : "pointer",
-            background: dropzoneBackground,
-            transition: "border-color 0.15s ease, background 0.15s ease",
-          }}
-        >
-          <input {...getInputProps()} />
-          <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
-            {isDragReject ? (
-              <XCircle size={28} color="#d32f2f" />
-            ) : file ? (
-              <FileSpreadsheet size={28} color="#2e7d32" />
-            ) : (
-              <UploadCloud size={28} />
-            )}
+        {file ? (
+          <Box
+            sx={{
+              border: "2px dashed",
+              borderColor: "success.main",
+              borderRadius: 2,
+              background: "rgba(46, 125, 50, 0.06)",
+              p: 3,
+            }}
+          >
+            <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                  <FileSpreadsheet size={16} color="#2e7d32" />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Selected File
+                  </Typography>
+                </Box>
+                <Tooltip title="Remove">
+                  <IconButton size="small" aria-label="Remove" onClick={handleRemoveFile} disabled={loading}>
+                    <X size={14} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                {file.name}
+              </Typography>
+            </Box>
           </Box>
-          <Typography color={isDragReject ? "error" : "text.secondary"}>
-            {isDragReject
-              ? "This file type isn't supported"
-              : file
-                ? <strong>{file.name}</strong>
+        ) : (
+          <Box
+            {...getRootProps()}
+            sx={{
+              border: "2px dashed",
+              borderColor: dropzoneBorderColor,
+              borderRadius: 2,
+              p: 4,
+              textAlign: "center",
+              cursor: loading ? "default" : "pointer",
+              background: dropzoneBackground,
+              transition: "border-color 0.15s ease, background 0.15s ease",
+            }}
+          >
+            <input {...getInputProps()} />
+            <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
+              {isDragReject ? <XCircle size={28} color="#d32f2f" /> : <UploadCloud size={28} />}
+            </Box>
+            <Typography color={isDragReject ? "error" : "text.secondary"}>
+              {isDragReject
+                ? "This file type isn't supported"
                 : isDragActive
                   ? "Drop the file here"
                   : "Drag & drop a .xls, .xlsx, or .xlsm file here, or click to choose one"}
-          </Typography>
-        </Box>
+            </Typography>
+          </Box>
+        )}
 
         {error && (
           <Typography color="error" variant="body2" sx={{ mt: 2 }}>
