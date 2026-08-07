@@ -196,7 +196,10 @@ export default function Home() {
   // Rows to actually save/display always come from the description merge
   // once one exists, otherwise the plain conversion - Add Description never
   // mutates `result`, it layers on top of it (see AddDescriptionDialog).
-  const activeRows = descResult ? descResult.rows : (result?.rows ?? []);
+  // Memoized so the `result?.rows ?? []` fallback doesn't hand every
+  // dependent useCallback/useMemo a new empty-array reference on every
+  // render whenever there's no result yet.
+  const activeRows = useMemo(() => (descResult ? descResult.rows : (result?.rows ?? [])), [descResult, result]);
 
   const handlePreviewLimitRequest = useCallback(
     (value: PreviewLimit) => {

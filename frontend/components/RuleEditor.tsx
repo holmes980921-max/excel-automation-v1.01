@@ -27,7 +27,6 @@ import {
   Select,
   MenuItem,
   Button,
-  IconButton,
   Typography,
   Divider,
 } from "@mui/material";
@@ -286,7 +285,7 @@ export default function RuleEditor({
           fullWidth
           variant="outlined"
         >
-          Update "{isDefault ? "-" : draft.rule_name}"
+          Update &quot;{isDefault ? "-" : draft.rule_name}&quot;
         </Button>
         <Button
           size="small"
