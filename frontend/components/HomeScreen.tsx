@@ -1,14 +1,21 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ClipboardEvent } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
-import { Box, Button, Typography, TextField, Divider } from "@mui/material";
-import { FileSpreadsheet, UploadCloud, XCircle, ClipboardPaste, Play } from "lucide-react";
+import { Box, Button, Typography, TextField, Divider, IconButton, Tooltip } from "@mui/material";
+import { FileSpreadsheet, UploadCloud, XCircle, ClipboardPaste, Play, CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
 import { convertFile, convertText, type ConvertResponse } from "@/lib/api";
 import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
+import { summarizePastedText, type PasteSummary } from "@/lib/pasteSummary";
 import ProcessingOverlay from "@/components/ProcessingOverlay";
 import AbortConfirmDialog from "@/components/AbortConfirmDialog";
+
+// MUI's multiline TextField has no height cap by default and will size
+// itself to fit every line of its value - fine for typed input, but a
+// disaster if hundreds of thousands of pasted lines ever reached it (see
+// handleTextPaste below, which makes sure they never do).
+const PASTE_TEXTAREA_MAX_ROWS = 8;
 
 type Props = {
   onConverted: (data: ConvertResponse) => void;
@@ -24,10 +31,14 @@ type Props = {
 export default function HomeScreen({ onConverted, debugMode }: Props) {
   const [file, setFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
+  // Set only via handleTextPaste - the raw pasted text itself never enters
+  // rendered state (see rawPasteTextRef), only its summary does.
+  const [pasteSummary, setPasteSummary] = useState<PasteSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [abortConfirmOpen, setAbortConfirmOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const rawPasteTextRef = useRef("");
 
   const onDrop = useCallback((accepted: File[], rejections: FileRejection[]) => {
     if (rejections.length > 0) {
@@ -37,6 +48,8 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     if (accepted[0]) {
       setFile(accepted[0]);
       setPastedText("");
+      setPasteSummary(null);
+      rawPasteTextRef.current = "";
       setError(null);
     }
   }, []);
@@ -49,13 +62,39 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
   });
 
   const handlePasteChange = (value: string) => {
+    // Typed input only - actual paste events are intercepted below and
+    // never reach here, so this never has to handle a huge string.
     setPastedText(value);
     if (value.trim()) setFile(null);
   };
 
+  // Intercepts the paste event itself so pasted content never touches the
+  // DOM/controlled textarea value, no matter how large - prevents the
+  // large-dataset freeze at the source rather than reacting to it after
+  // the fact. Parsing is a single fast pass (see lib/pasteSummary.ts); the
+  // full text is kept only in a ref, and the UI collapses to a lightweight
+  // summary instead of rendering it.
+  const handleTextPaste = (e: ClipboardEvent<Element>) => {
+    const text = e.clipboardData.getData("text");
+    if (!text) return;
+    e.preventDefault();
+    rawPasteTextRef.current = text;
+    setPasteSummary(summarizePastedText(text));
+    setPastedText("");
+    setFile(null);
+    setError(null);
+  };
+
+  const handleClearPaste = () => {
+    rawPasteTextRef.current = "";
+    setPasteSummary(null);
+    setPastedText("");
+  };
+
   const handleConvert = async () => {
     if (loading) return; // belt-and-suspenders against a duplicate in-flight request
-    if (!file && !pastedText.trim()) return;
+    const pasteText = pasteSummary ? rawPasteTextRef.current : pastedText;
+    if (!file && !pasteText.trim()) return;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -64,10 +103,12 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     try {
       const data = file
         ? await convertFile(file, debugMode, controller.signal)
-        : await convertText(pastedText, debugMode, controller.signal);
+        : await convertText(pasteText, debugMode, controller.signal);
       onConverted(data);
       setFile(null);
       setPastedText("");
+      setPasteSummary(null);
+      rawPasteTextRef.current = "";
     } catch (err) {
       if (err instanceof DOMException && err.name === "AbortError") {
         // User-initiated cancel, not a failure - no error toast.
@@ -89,7 +130,7 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     setAbortConfirmOpen(false);
   };
 
-  const canConvert = !!file || !!pastedText.trim();
+  const canConvert = !!file || !!pasteSummary || !!pastedText.trim();
 
   const dropzoneBorderColor = isDragReject ? "error.main" : isDragAccept ? "success.main" : "divider";
   const dropzoneBackground = isDragReject
@@ -171,11 +212,11 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
             sx={{
               flex: "1 1 320px",
               border: "2px dashed",
-              borderColor: pastedText ? "success.main" : "divider",
+              borderColor: pastedText || pasteSummary ? "success.main" : "divider",
               borderRadius: 2,
               p: 4,
               textAlign: "center",
-              background: pastedText ? "rgba(46, 125, 50, 0.06)" : "transparent",
+              background: pastedText || pasteSummary ? "rgba(46, 125, 50, 0.06)" : "transparent",
             }}
           >
             <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
@@ -184,16 +225,48 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
             <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
               <ClipboardPaste size={32} />
             </Box>
-            <TextField
-              multiline
-              minRows={4}
-              fullWidth
-              disabled={loading}
-              placeholder="Ctrl + V - Paste Excel Data"
-              value={pastedText}
-              onChange={(e) => handlePasteChange(e.target.value)}
-              sx={{ background: "#fff" }}
-            />
+            {pasteSummary ? (
+              // Large-dataset fix (V1.08): the raw pasted text never renders
+              // here - only this lightweight summary does, regardless of
+              // how many rows were pasted.
+              <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
+                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <CheckCircle2 size={16} color="#2e7d32" />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      Clipboard Loaded
+                    </Typography>
+                  </Box>
+                  <Tooltip title="Clear">
+                    <IconButton size="small" aria-label="Clear" onClick={handleClearPaste} disabled={loading}>
+                      <X size={14} />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Typography variant="body2" color="text.secondary">
+                  Rows: {pasteSummary.rows.toLocaleString()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Columns: {pasteSummary.columns.toLocaleString()}
+                </Typography>
+                <Typography variant="body2" color="success.main" sx={{ mt: 0.5 }}>
+                  Status: Ready to Convert
+                </Typography>
+              </Box>
+            ) : (
+              <TextField
+                multiline
+                minRows={4}
+                maxRows={PASTE_TEXTAREA_MAX_ROWS}
+                fullWidth
+                disabled={loading}
+                placeholder="Ctrl + V - Paste Excel Data"
+                value={pastedText}
+                onChange={(e) => handlePasteChange(e.target.value)}
+                onPaste={handleTextPaste}
+                sx={{ background: "#fff" }}
+              />
+            )}
           </Box>
         </Box>
 
