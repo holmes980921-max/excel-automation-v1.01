@@ -18,7 +18,7 @@ from app.utils.logging_config import configure_logging, get_logger
 configure_logging(debug_mode=False)
 error_log = get_logger("error")
 
-APP_VERSION = "1.7.0"
+APP_VERSION = "1.8.0"
 
 app = FastAPI(title="Excel Automation", version=APP_VERSION)
 
