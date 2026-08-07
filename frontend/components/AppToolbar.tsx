@@ -18,7 +18,7 @@ import {
   Divider,
   Select,
 } from "@mui/material";
-import { Home, Save, FolderOutput, SlidersHorizontal, Search, Settings, Info, FileText } from "lucide-react";
+import { Home, Save, FolderOutput, SlidersHorizontal, Search, Settings, Info, FileText, Newspaper } from "lucide-react";
 
 export const PREVIEW_ROW_OPTIONS = [100, 500, 1000, 5000] as const;
 export type PreviewLimit = (typeof PREVIEW_ROW_OPTIONS)[number] | "all";
@@ -38,6 +38,7 @@ type Props = {
   debugMode: boolean;
   onToggleDebugMode: () => void;
   onOpenAbout: () => void;
+  onOpenReleaseNotes: () => void;
   previewLimit: PreviewLimit;
   onPreviewLimitChange: (value: PreviewLimit) => void;
   onAddDescriptionClick: () => void;
@@ -59,6 +60,7 @@ export default function AppToolbar({
   debugMode,
   onToggleDebugMode,
   onOpenAbout,
+  onOpenReleaseNotes,
   previewLimit,
   onPreviewLimitChange,
   onAddDescriptionClick,
@@ -72,8 +74,11 @@ export default function AppToolbar({
         <Button size="small" startIcon={<Home size={16} />} onClick={onHomeClick}>
           Home
         </Button>
+        <Button size="small" startIcon={<Newspaper size={16} />} onClick={onOpenReleaseNotes}>
+          Release Notes
+        </Button>
         <Typography variant="subtitle1" sx={{ mr: 2, whiteSpace: "nowrap", fontWeight: 700 }}>
-          Excel Automation
+          RCC Excel Automation
         </Typography>
 
         {hasResult && (
