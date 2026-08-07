@@ -1,19 +1,26 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Box, Button, Typography } from "@mui/material";
-import { Upload } from "lucide-react";
+import { Box } from "@mui/material";
 import { toast } from "sonner";
 
 import AppToolbar, { type PreviewLimit } from "@/components/AppToolbar";
 import StatusBar from "@/components/StatusBar";
+import WorkflowBadges from "@/components/WorkflowBadges";
 import RuleEditor from "@/components/RuleEditor";
 import ExcelGrid from "@/components/ExcelGrid";
 import AboutDialog from "@/components/AboutDialog";
-import UploadDialog, { type ConvertResponse } from "@/components/UploadDialog";
+import HomeScreen from "@/components/HomeScreen";
+import ReturnHomeDialog from "@/components/ReturnHomeDialog";
 import AddDescriptionDialog from "@/components/AddDescriptionDialog";
 import LargeDatasetWarningDialog from "@/components/LargeDatasetWarningDialog";
-import { exportRows, saveAs, downloadBase64File, type AddDescriptionResponse } from "@/lib/api";
+import {
+  exportRows,
+  saveAs,
+  downloadBase64File,
+  type ConvertResponse,
+  type AddDescriptionResponse,
+} from "@/lib/api";
 import { generateDefaultFilename } from "@/lib/filename";
 import { filterRows } from "@/lib/searchFilter";
 import {
@@ -43,9 +50,9 @@ export default function Home() {
   const [activeRuleId, setActiveRuleIdState] = useState(DEFAULT_RULE.id);
   const [draft, setDraft] = useState<TransformationRule>(() => normalizeForEditing(DEFAULT_RULE));
 
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [addDescriptionOpen, setAddDescriptionOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [homeConfirmOpen, setHomeConfirmOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(true);
   // Hidden by default (V1.05: "simplify the interface for everyday users
   // while preserving advanced functionality") - loaded from localStorage
@@ -102,15 +109,22 @@ export default function Home() {
     });
   }, []);
 
+  // Shared by both a fresh conversion (clears any prior session first) and
+  // the Home-navigation confirm (discards the session entirely).
+  const resetSession = useCallback(() => {
+    setResult(null);
+    setDescResult(null);
+    setSearchValue("");
+    setPreviewLimit(DEFAULT_PREVIEW_LIMIT);
+  }, []);
+
   const handleConverted = useCallback(
     (data: ConvertResponse) => {
+      resetSession();
       setResult(data);
-      setDescResult(null); // a fresh conversion always discards any prior Add Description merge
-      setSearchValue("");
-      setPreviewLimit(DEFAULT_PREVIEW_LIMIT);
       showStatusMessage(`Converted ${data.summary.generated_rows} rows from ${data.summary.ppid_count} PPIDs`);
     },
-    [showStatusMessage]
+    [resetSession, showStatusMessage]
   );
 
   const handleDescriptionMerged = useCallback(
@@ -120,6 +134,18 @@ export default function Home() {
     },
     [showStatusMessage]
   );
+
+  // V1.07 Home navigation: no-op if there's nothing to lose, otherwise
+  // asks for confirmation before discarding the active session.
+  const handleHomeClick = useCallback(() => {
+    if (!result) return;
+    setHomeConfirmOpen(true);
+  }, [result]);
+
+  const handleConfirmGoHome = useCallback(() => {
+    resetSession();
+    setHomeConfirmOpen(false);
+  }, [resetSession]);
 
   const handleSelectRule = useCallback((id: string) => {
     setActiveRuleIdState(id);
@@ -229,7 +255,12 @@ export default function Home() {
   }, [result, saving, activeRows, draft, showStatusMessage]);
 
   const displayColumns = resolveDisplayColumns(draft);
-  const extraColumns = useMemo(() => (descResult ? [{ field: "DESC", header: "DESC" }] : []), [descResult]);
+  // DESC always sits immediately after PPID (V1.07), matching exactly what
+  // /api/export produces (see routes.py's export_rows) - "Preview = Export."
+  const extraColumns = useMemo(
+    () => (descResult ? [{ field: "DESC", header: "DESC", insertAfterField: "PPID" }] : []),
+    [descResult]
+  );
   const showRulePanel = showAdvanced && rulesOpen;
 
   // Search always runs against the full dataset so the match count is
@@ -245,7 +276,8 @@ export default function Home() {
   return (
     <Box sx={{ display: "flex", flexDirection: "column", height: "100vh", width: "100vw" }}>
       <AppToolbar
-        onUploadClick={() => setUploadOpen(true)}
+        onHomeClick={handleHomeClick}
+        hasResult={!!result}
         onQuickSaveClick={handleQuickSave}
         onSaveAsClick={handleSaveAs}
         saveDisabled={!result || saving}
@@ -264,47 +296,37 @@ export default function Home() {
         addDescriptionDisabled={!result}
       />
 
+      <WorkflowBadges converted={!!result} descriptionApplied={!!descResult} readyToSave={!!result} />
+
       <Box sx={{ display: "flex", flex: 1, minHeight: 0 }}>
-        {showRulePanel && (
-          <Box sx={{ width: 340, flexShrink: 0, borderRight: "1px solid #e0e0e0", background: "#fff" }}>
-            <RuleEditor
-              draft={draft}
-              onDraftChange={setDraft}
-              rules={rules}
-              activeRuleId={activeRuleId}
-              onSelectRule={handleSelectRule}
-              onSaveAsNew={handleSaveAsNew}
-              onUpdateCurrent={handleUpdateCurrent}
-              onDeleteCurrent={handleDeleteCurrent}
-              onResetToDefault={handleResetToDefault}
-              onStatusMessage={showStatusMessage}
-            />
+        {result ? (
+          <>
+            {showRulePanel && (
+              <Box sx={{ width: 340, flexShrink: 0, borderRight: "1px solid #e0e0e0", background: "#fff" }}>
+                <RuleEditor
+                  draft={draft}
+                  onDraftChange={setDraft}
+                  rules={rules}
+                  activeRuleId={activeRuleId}
+                  onSelectRule={handleSelectRule}
+                  onSaveAsNew={handleSaveAsNew}
+                  onUpdateCurrent={handleUpdateCurrent}
+                  onDeleteCurrent={handleDeleteCurrent}
+                  onResetToDefault={handleResetToDefault}
+                  onStatusMessage={showStatusMessage}
+                />
+              </Box>
+            )}
+
+            <Box sx={{ flex: 1, minWidth: 0, p: 1.5, background: "#FDF8F0" }}>
+              <ExcelGrid rows={previewRows} rule={draft} extraColumns={extraColumns} />
+            </Box>
+          </>
+        ) : (
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <HomeScreen onConverted={handleConverted} debugMode={debugMode} />
           </Box>
         )}
-
-        <Box sx={{ flex: 1, minWidth: 0, p: 1.5, background: "#FDF8F0" }}>
-          {result ? (
-            <ExcelGrid rows={previewRows} rule={draft} extraColumns={extraColumns} />
-          ) : (
-            <Box
-              sx={{
-                height: "100%",
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 2,
-                color: "text.secondary",
-              }}
-            >
-              <Typography variant="h6">No data yet</Typography>
-              <Typography variant="body2">Upload an excel file or paste data to get started.</Typography>
-              <Button variant="contained" startIcon={<Upload size={16} />} onClick={() => setUploadOpen(true)}>
-                Upload File
-              </Button>
-            </Box>
-          )}
-        </Box>
       </Box>
 
       <StatusBar
@@ -323,12 +345,6 @@ export default function Home() {
         statusMessage={statusMessage}
       />
 
-      <UploadDialog
-        open={uploadOpen}
-        onClose={() => setUploadOpen(false)}
-        onConverted={handleConverted}
-        debugMode={debugMode}
-      />
       <AddDescriptionDialog
         open={addDescriptionOpen}
         onClose={() => setAddDescriptionOpen(false)}
@@ -339,6 +355,11 @@ export default function Home() {
         open={largeDatasetWarningOpen}
         onCancel={handleWarningCancel}
         onContinue={handleWarningContinue}
+      />
+      <ReturnHomeDialog
+        open={homeConfirmOpen}
+        onConfirmHome={handleConfirmGoHome}
+        onStay={() => setHomeConfirmOpen(false)}
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </Box>
