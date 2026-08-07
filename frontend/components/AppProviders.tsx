@@ -2,6 +2,7 @@
 
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 import { Toaster } from "sonner";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const theme = createTheme({
   palette: {
@@ -19,7 +20,7 @@ export default function AppProviders({ children }: { children: React.ReactNode }
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {children}
+      <ErrorBoundary>{children}</ErrorBoundary>
       {/* Bottom-right, and only ever used for errors/warnings (see StatusBar for
           success feedback) - guarantees the toolbar and search box are never covered. */}
       <Toaster richColors position="bottom-right" />
