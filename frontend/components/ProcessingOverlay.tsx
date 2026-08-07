@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Box, Typography, LinearProgress } from "@mui/material";
+import { Box, Typography, LinearProgress, Button } from "@mui/material";
+import { XCircle } from "lucide-react";
 
 const STAGES = [
   "Reading Excel",
@@ -27,9 +28,14 @@ const ESTIMATED_MB_PER_SECOND = 15;
 type Props = {
   open: boolean;
   fileSizeMB?: number;
+  /** V1.07: shows an Abort button while processing when provided - omit to
+   * render the overlay with no way to cancel (e.g. Add Description, which
+   * the spec scopes Abort out of - "Abort is only enabled while a
+   * conversion is running"). */
+  onAbortClick?: () => void;
 };
 
-export default function ProcessingOverlay({ open, fileSizeMB }: Props) {
+export default function ProcessingOverlay({ open, fileSizeMB, onAbortClick }: Props) {
   const [stageIndex, setStageIndex] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -89,6 +95,11 @@ export default function ProcessingOverlay({ open, fileSizeMB }: Props) {
         Elapsed: {(elapsedMs / 1000).toFixed(1)}s
         {estimatedSeconds !== null ? ` (estimated ~${estimatedSeconds}s)` : ""}
       </Typography>
+      {onAbortClick && (
+        <Button size="small" color="error" startIcon={<XCircle size={16} />} onClick={onAbortClick} sx={{ mt: 1 }}>
+          Abort
+        </Button>
+      )}
     </Box>
   );
 }

@@ -55,22 +55,32 @@ async function parseErrorDetail(res: Response, fallback: string): Promise<string
   return (body && typeof body.detail === "string" && body.detail) || fallback;
 }
 
-export async function convertFile(file: File, debug = false): Promise<ConvertResponse> {
+export async function convertFile(
+  file: File,
+  debug = false,
+  signal?: AbortSignal
+): Promise<ConvertResponse> {
   const formData = new FormData();
   formData.append("file", file);
   const res = await fetch(`${API_BASE}/api/convert${debug ? "?debug=true" : ""}`, {
     method: "POST",
     body: formData,
+    signal,
   });
   if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Conversion failed (${res.status})`));
   return res.json();
 }
 
-export async function convertText(text: string, debug = false): Promise<ConvertResponse> {
+export async function convertText(
+  text: string,
+  debug = false,
+  signal?: AbortSignal
+): Promise<ConvertResponse> {
   const res = await fetch(`${API_BASE}/api/convert-text${debug ? "?debug=true" : ""}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
+    signal,
   });
   if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Conversion failed (${res.status})`));
   return res.json();
