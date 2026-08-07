@@ -164,6 +164,27 @@ def test_export_includes_desc_when_present():
     assert "DESC" in header
 
 
+def test_export_places_desc_immediately_after_ppid():
+    rows = [{**_CONVERTED_ROWS[0], "DESC": "First PPID"}]
+    res = client.post("/api/export", json={"filename": "out.xlsx", "rows": rows, "rule": None})
+    assert res.status_code == 200
+    xlsx_bytes = base64.b64decode(res.json()["file_base64"])
+    wb = openpyxl.load_workbook(BytesIO(xlsx_bytes))
+    header = next(wb.active.iter_rows(values_only=True))
+    assert header[0] == "PPID"
+    assert header[1] == "DESC"
+
+
+def test_export_places_desc_after_ppid_even_with_a_reordering_rule():
+    rows = [{**_CONVERTED_ROWS[0], "DESC": "First PPID"}]
+    rule = {"output_columns": ["PPID", "CardName", "TS#"], "column_order": ["CardName", "PPID", "TS#"]}
+    res = client.post("/api/export", json={"filename": "out.xlsx", "rows": rows, "rule": rule})
+    assert res.status_code == 200
+    xlsx_bytes = base64.b64decode(res.json()["file_base64"])
+    header = list(next(openpyxl.load_workbook(BytesIO(xlsx_bytes)).active.iter_rows(values_only=True)))
+    assert header == ["CardName", "PPID", "DESC", "TS#"]
+
+
 def test_add_description_success():
     import json
 
@@ -178,6 +199,8 @@ def test_add_description_success():
     assert data["matched_count"] == 2
     assert data["unmatched_count"] == 0
     assert all(row["DESC"] for row in data["rows"])
+    assert data["columns"][:2] == ["PPID", "DESC"]
+    assert list(data["rows"][0].keys())[:2] == ["PPID", "DESC"]
 
 
 def test_add_description_reports_unmatched():

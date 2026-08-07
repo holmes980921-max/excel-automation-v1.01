@@ -62,6 +62,23 @@ def test_merge_adds_desc_to_every_matching_row():
     assert result.unmatched_ppids == []
 
 
+def test_merge_places_desc_immediately_after_ppid():
+    desc_df = pd.DataFrame({"PPID": ["AB000010_1"], "DESC": ["First PPID"]})
+    result = merge_description(_rows_df(), desc_df)
+
+    assert list(result.df.columns) == ["PPID", "DESC", "TS#", "CardName"]
+
+
+def test_merge_places_desc_after_ppid_regardless_of_ppid_original_position():
+    # PPID isn't first in this input frame - DESC should still land
+    # immediately after wherever PPID actually is.
+    rows_df = pd.DataFrame({"TS#": ["TS#1"], "PPID": ["AB000010_1"], "CardName": ["C"]})
+    desc_df = pd.DataFrame({"PPID": ["AB000010_1"], "DESC": ["First PPID"]})
+    result = merge_description(rows_df, desc_df)
+
+    assert list(result.df.columns) == ["TS#", "PPID", "DESC", "CardName"]
+
+
 def test_merge_is_left_join_unmatched_rows_get_missing_value():
     desc_df = pd.DataFrame({"PPID": ["AB000010_1"], "DESC": ["First PPID"]})
     result = merge_description(_rows_df(), desc_df)
