@@ -53,8 +53,16 @@ def _generate_rows(ppid_count: int = PPID_COUNT) -> tuple[list[list], int, int]:
 
         ts_count = rng.randint(1, 10)
         for ts_num in range(1, ts_count + 1):
-            total_ts += 1
             present_fields = [f for f in FIELDS if rng.random() > 0.15]
+            # A TS block with every field randomly dropped never gets a data
+            # row written for it, so the transformer has no evidence it was
+            # ever intended to exist and correctly produces no output row
+            # for it - only count it as an expected row when it actually has
+            # at least one field (V1.08: fixed a rare off-by-one this caused
+            # at large PPID_COUNT, where the ~1e-6 per-block chance of this
+            # actually occurs a handful of times).
+            if present_fields:
+                total_ts += 1
             for field in present_fields:
                 if field in ("DataCombination", "DataFeedFoward"):
                     value = rng.randint(0, 100)
