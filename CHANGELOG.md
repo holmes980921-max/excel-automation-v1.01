@@ -1,5 +1,82 @@
 # Changelog
 
+## v1.08 - Production Readiness & Stability
+
+### Release Notes
+
+V1.08 is a stabilization-only release, by explicit design - no new user-facing functionality.
+The headline fix is the browser freezing when ~200,000+ rows were pasted into the app: pasted
+text now never reaches the DOM (intercepted at the paste event, summarized in a fast single pass,
+kept only in memory), root-cause-fixed rather than patched around, with measured verification
+(~9ms to summarize 200,000 rows). A dependency audit found that `psutil` - used unconditionally on
+every conversion request - was missing from `requirements.txt`, meaning a genuinely clean install
+would have crashed on the first real request; this is now fixed and verified with an actual
+fresh-virtualenv install test. Two categories of duplicated logic (DESC column placement, and each
+API route's exception-handling boilerplate) were consolidated into shared, directly-tested
+implementations. A top-level error boundary now catches unexpected UI errors. ESLint is configured
+for the first time (flagged as missing since V1.05). Backend test coverage rose from 88% to 94%.
+Full detail: [CODE_REVIEW_V1.08.md](./CODE_REVIEW_V1.08.md) (scored **A**),
+[PERFORMANCE_REPORT_V1.08.md](./PERFORMANCE_REPORT_V1.08.md),
+[DEPENDENCY_AUDIT_V1.08.md](./DEPENDENCY_AUDIT_V1.08.md),
+[TEST_COVERAGE_V1.08.md](./TEST_COVERAGE_V1.08.md).
+
+### Fixed
+- **Large-paste browser freeze** (~200,000+ rows) - root cause was an MUI `TextField` with no
+  `maxRows`, auto-sizing to fit the entire pasted value. Pasted text is now intercepted before it
+  reaches the DOM/controlled value at all; the UI shows a lightweight row/column summary instead.
+  `frontend/lib/pasteSummary.ts`, `frontend/components/HomeScreen.tsx`.
+- **`psutil` missing from `requirements.txt`** - used unconditionally by `PeakMemorySampler` on
+  every `/api/convert`/`/api/convert-text` request; a clean install would have crashed on first
+  use. Also added `numpy` (directly imported, previously only an invisible transitive dependency).
+- A rare off-by-one in the shared mock-data generator's expected-row-count accounting
+  (`backend/scripts/make_mock.py`) - surfaced by the new large-dataset test.
+- `page.tsx`'s `activeRows` derived value is now memoized - previously recomputed with a new array
+  reference on every render whenever there was no active result, needlessly invalidating dependent
+  `useCallback`/`useMemo` hooks (caught by newly-enabled ESLint).
+
+### Added
+- `backend/app/utils/df_helpers.py` (`find_insert_position`, `insert_column_after`) - shared
+  DESC-column-placement logic, replacing two independent implementations.
+- `backend/app/api/error_handling.py` (`handle_route_errors`) - shared two-tier exception-handling
+  policy (expected rejection -> 400 with its own message; unexpected -> a route-specific friendly
+  message), replacing four routes' worth of hand-rolled, and in two cases inconsistent, try/except
+  boilerplate.
+- `frontend/components/ErrorBoundary.tsx` - top-level React error boundary with a "Return to Home"
+  recovery action, wrapping the whole app in `AppProviders`.
+- `frontend/eslint.config.mjs` - ESLint flat config (`next/core-web-vitals` + `next/typescript`),
+  hand-authored to avoid `next lint`'s interactive first-run wizard; `npm run lint` now runs the
+  ESLint CLI directly.
+- `noUnusedLocals`/`noUnusedParameters` enabled in `frontend/tsconfig.json`.
+- `backend/tests/test_large_dataset.py` - correctness (not just "doesn't crash") check at
+  ~175,600-input-row / ~27,000-output-row scale, via both `/api/convert` and `/api/convert-text`.
+- `backend/tests/test_df_helpers.py`, `test_error_handling.py` - direct unit tests of the new
+  shared helpers.
+- `frontend/lib/pasteSummary.test.ts`, `components/ErrorBoundary.test.tsx` - new component/util
+  tests, plus new Abort-recovery and large-paste tests added to `HomeScreen.test.tsx`.
+
+### Changed
+- `backend/app/api/routes.py` - all four routes now use `handle_route_errors`; `convert_excel` and
+  `add_description` share a new `_read_validated_upload()` helper (filename/emptiness/size-cap
+  checks were previously copy-pasted between them).
+- Removed unused frontend devDependency `@testing-library/user-event`.
+
+### Investigated and resolved (not a code change)
+- The recurring "some files with passing tests don't appear in the Vitest coverage table" question
+  (flagged in V1.05, V1.06, and V1.07's reports with a different file set each time) is root-caused:
+  every affected file achieves literal 100% coverage across all four metrics, and the v8 text
+  reporter simply omits fully-covered files from the per-file breakdown. Confirmed by testing
+  V1.07's suggested fix (disabling file parallelism - no effect) and then verifying the actual
+  hypothesis directly. See `TEST_COVERAGE_V1.08.md`.
+- The rule-shaping duplication between `rule_manager.py`/`lib/rules.ts` (flagged since V1.04) was
+  reviewed and **deliberately kept** - see `CODE_REVIEW_V1.08.md`'s Architecture section for the
+  reasoning, rather than carrying it forward undecided again.
+
+### Known limitations (disclosed, not fixed this version)
+- Abort remains client-side only - it cancels the browser's request but does not interrupt the
+  backend's already-started computation. Not user-visible at this app's current scale.
+- 3 `npm audit` high-severity findings (transitive through `next`'s own dependencies) require a
+  Next.js major-version bump, deliberately not performed this version (breaking-change risk).
+
 ## v1.07 - User Experience & Workflow
 
 ### Release Notes

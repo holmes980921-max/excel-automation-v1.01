@@ -5,7 +5,7 @@ Value excel export into a flat table - one row per `TS#` block - and lets you cu
 columns appear, in what order, and under what display name, entirely through the UI (no code
 changes required).
 
-**Current version: V1.07** (see the in-app **About** dialog, under the Settings menu, for the
+**Current version: V1.08** (see the in-app **About** dialog, under the Settings menu, for the
 live version/build info - the header intentionally no longer hardcodes a version string)
 
 ## Quick Start (Windows)
@@ -22,6 +22,32 @@ manual setup required. See [Developer Experience](#developer-experience) below f
 [Troubleshooting](#troubleshooting) if something doesn't come up.
 
 ## Features
+
+### Production Readiness & Stability (V1.08)
+- **No new functionality by design** - this release is entirely stabilization: refactoring,
+  reliability, performance, dependency cleanup, and test/static-analysis coverage. See
+  [CODE_REVIEW_V1.08.md](./CODE_REVIEW_V1.08.md) for the full assessment.
+- **Fixed: pasting ~200,000+ rows no longer freezes the browser.** Pasted text is now intercepted
+  before it ever reaches the DOM (it used to be bound directly to an auto-sizing textarea with no
+  height cap); the UI instead shows a lightweight "Clipboard Loaded / Rows: N / Columns: N /
+  Status: Ready to Convert" summary. Measured at ~9ms to summarize 200,000 rows - see
+  [PERFORMANCE_REPORT_V1.08.md](./PERFORMANCE_REPORT_V1.08.md).
+- **Fixed: a genuinely clean install was broken.** `psutil` (used on every conversion request) was
+  missing from `requirements.txt` - `pip install -r requirements.txt` followed by starting the
+  server would have crashed on the first request. Found and fixed via an actual fresh-virtualenv
+  install test, not just a manifest read-through. See
+  [DEPENDENCY_AUDIT_V1.08.md](./DEPENDENCY_AUDIT_V1.08.md).
+- **A top-level error boundary** now catches unexpected UI errors and offers a "Return to Home"
+  recovery action instead of a blank page.
+- **Consolidated duplicated logic**: the "insert DESC after PPID" placement rule and the four API
+  routes' exception-handling boilerplate were each independently written 2-4 times; both are now
+  one shared implementation apiece, directly unit-tested.
+- **Static analysis, for the first time**: ESLint is now configured and enforced (flagged as
+  missing since V1.05); `noUnusedLocals`/`noUnusedParameters` enabled in `tsconfig.json`.
+- **Test suites expanded**: backend 94% coverage (up from 88%), including a new large-dataset
+  correctness test (~175,600 input rows) and direct tests of the newly-extracted shared logic;
+  frontend gained Abort-recovery and ErrorBoundary tests. See
+  [TEST_COVERAGE_V1.08.md](./TEST_COVERAGE_V1.08.md).
 
 ### Desktop-Quality UX (V1.07)
 - **Home screen** - the application's starting point. No "Upload" click needed first: drag & drop
@@ -142,14 +168,15 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Backend (pytest, 55 tests)
+# Backend (pytest, 67 tests)
 cd backend
 ./.venv/Scripts/pip install -r requirements-dev.txt
 ./.venv/Scripts/python.exe -m pytest                              # or: pytest --cov=app --cov-report=term-missing
 
-# Frontend (Vitest, 52 tests)
+# Frontend (Vitest, 64 tests)
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
+npm run lint                                                        # ESLint (new in V1.08)
 ```
 
 ### Debug Mode
@@ -176,7 +203,9 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
 1. Launch the app - you land directly on the **Home** screen (no Upload click needed).
 2. Either **drag & drop** a `.xls`/`.xlsx`/`.xlsm` file onto the Upload panel (or click it to
    browse), or click into the Paste panel and **Ctrl+V** a range copied from Excel. Using one
-   clears the other, so there's never ambiguity about which input Convert will use.
+   clears the other, so there's never ambiguity about which input Convert will use. A large paste
+   (~200,000+ rows) shows a "Clipboard Loaded" summary instead of the raw text - see
+   [Troubleshooting](#troubleshooting).
 3. Click **Convert**. A processing overlay shows progress; click **Abort** if you need to cancel
    (a confirmation appears before anything is actually discarded).
 4. Once converted, you're on the Preview screen - the toolbar now shows Quick Save/Save As/Add
@@ -324,7 +353,14 @@ Abort cancels the browser's request immediately (the UI returns to Home right aw
 in-flight response is discarded when it eventually arrives) - it does not interrupt the backend's
 in-progress computation, which keeps running to completion server-side and simply has its result
 ignored. At this app's target scale (sub-2s conversions, per the V1.05 benchmark) this is not
-user-visible; genuinely interrupting server-side work is reserved for V1.08 (reliability).
+user-visible; a real server-side cancellation mechanism is recommended for V1.09+ (see
+[CODE_REVIEW_V1.08.md](./CODE_REVIEW_V1.08.md)).
+
+**Pasting a very large range (~200,000+ rows) shows a summary instead of the pasted text.**
+This is intentional (V1.08) - pasting that much text directly into a rendered textarea used to
+freeze the browser. The summary ("Clipboard Loaded / Rows / Columns / Status: Ready to Convert")
+confirms the paste was captured correctly; click **Clear** to paste something else, or **Convert**
+to proceed with the full pasted data (it's kept in memory, just not rendered).
 
 **Save As doesn't open a native folder picker.**
 The OS-native Save dialog uses the browser's File System Access API, which only Chromium-based
@@ -346,10 +382,16 @@ excel-automation-v1.01/
 ├── CODE_REVIEW_V1.05.md            # Architecture/performance/reliability/... review + score
 ├── CODE_REVIEW_V1.06.md            # V1.06 review + score (Add Description, Preview Rows, Save UX)
 ├── CODE_REVIEW_V1.07.md            # V1.07 review + score (Home screen, Abort, DESC placement, Preview=Export)
+├── CODE_REVIEW_V1.08.md            # V1.08 review + score (stabilization: refactoring, reliability, perf, deps)
+├── PERFORMANCE_REPORT_V1.08.md     # Large-paste freeze root cause/fix + pipeline profiling
+├── DEPENDENCY_AUDIT_V1.08.md       # Missing/unused dependency findings incl. the psutil clean-install bug
+├── TEST_COVERAGE_V1.08.md          # Backend/frontend coverage breakdown
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app entry, CORS, logging setup, global exception handler
-│   │   ├── api/routes.py              # HTTP layer only - calls into services/; upload size limit, Debug Mode
+│   │   ├── api/
+│   │   │   ├── routes.py              # HTTP layer only - calls into services/; upload size limit, Debug Mode
+│   │   │   └── error_handling.py      # V1.08: shared two-tier route exception-handling policy
 │   │   ├── services/
 │   │   │   ├── excel_transformer.py   # Core conversion logic (unchanged since V1.02) + summary stats
 │   │   │   ├── rule_manager.py        # Validates/applies a TransformationRule (column select/order/alias)
@@ -360,11 +402,12 @@ excel-automation-v1.01/
 │   │   └── utils/
 │   │       ├── excel_io.py            # In-memory excel read/write; calamine-first w/ openpyxl/xlrd fallback
 │   │       ├── logging_config.py      # Structured (Application/Error/Performance/Debug) logging setup
-│   │       └── perf.py                # PeakMemorySampler - shared by Debug Mode and the benchmark script
+│   │       ├── perf.py                # PeakMemorySampler - shared by Debug Mode and the benchmark script
+│   │       └── df_helpers.py          # V1.08: shared column-placement helpers (find_insert_position, insert_column_after)
 │   ├── scripts/
 │   │   ├── make_mock.py               # Production-like mock data generator (.xlsx and .xls)
 │   │   └── benchmark.py               # Performance benchmark harness (timing + peak memory + throughput)
-│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 55 tests
+│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 67 tests
 │   ├── requirements.txt
 │   └── requirements-dev.txt           # xlwt (mock .xls fixtures), pytest, pytest-cov, httpx (TestClient)
 └── frontend/
@@ -373,13 +416,14 @@ excel-automation-v1.01/
     │   ├── layout.tsx                 # MUI SSR cache provider (AppRouterCacheProvider) + providers
     │   └── globals.css
     ├── components/
-    │   ├── AppProviders.tsx           # MUI theme + Sonner toaster (errors/warnings only)
+    │   ├── AppProviders.tsx           # MUI theme + Sonner toaster + ErrorBoundary wrapper
+    │   ├── ErrorBoundary.tsx          # V1.08: top-level UI recovery after an unexpected render error
     │   ├── AppToolbar.tsx             # Home / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
     │   ├── StatusBar.tsx              # Rows/Columns/matches/Rule + Description stats + completion feedback + Debug metrics
     │   ├── WorkflowBadges.tsx         # V1.07: Converted / Description Applied / Ready to Save status strip
     │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA, Abort
     │   ├── AboutDialog.tsx            # App name/version/git tag/build date/backend+frontend framework
-    │   ├── HomeScreen.tsx             # V1.07: application entry point - drag & drop / paste / Convert, replaces UploadDialog
+    │   ├── HomeScreen.tsx             # Application entry point - drag & drop / paste / Convert; large-paste freeze fixed in V1.08
     │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID
     │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
     │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
@@ -393,9 +437,11 @@ excel-automation-v1.01/
     │   ├── uploadValidation.ts        # Pure file-rejection-message logic (extracted for testability)
     │   ├── searchFilter.ts            # V1.06: pure row-search predicate (search always runs on the full dataset)
     │   ├── filename.ts                # V1.06: default save filename (RCC_converted_YYMMDD_HHMMSS.xlsx)
+    │   ├── pasteSummary.ts            # V1.08: lightweight row/column summary for a large paste, never renders the raw text
     │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE for the About dialog
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 52 tests
+    ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 64 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -435,6 +481,14 @@ concerns independent and separately testable.
   confirmation, Abort for in-flight conversions, workflow status badges, DESC repositioned
   immediately after PPID, and a guaranteed Preview = Export column-order match. See
   [CODE_REVIEW_V1.07.md](./CODE_REVIEW_V1.07.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.08** - Production readiness & stability, no new functionality by design: fixed the
+  large-paste browser freeze at its root cause, found and fixed a `psutil` dependency gap that
+  would have broken a genuinely clean install, deduplicated DESC-placement and route
+  exception-handling logic, added a top-level error boundary, configured ESLint for the first
+  time, and expanded test coverage (backend 88% → 94%). See
+  [CODE_REVIEW_V1.08.md](./CODE_REVIEW_V1.08.md) (scored **A**),
+  [PERFORMANCE_REPORT_V1.08.md](./PERFORMANCE_REPORT_V1.08.md),
+  [DEPENDENCY_AUDIT_V1.08.md](./DEPENDENCY_AUDIT_V1.08.md), and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -471,3 +525,10 @@ conversion/rule-shaping engines were not touched. The DESC column's *position* c
 immediately after PPID, was previously appended at the end) - this is an explicitly requested
 behavior change for V1.07, not a regression; DESC's *values* and the underlying conversion output
 are otherwise identical.
+
+**V1.08**: `excel_transformer.py`, `constants.py`, and `rule_manager.py` remain byte-identical to
+the `v1.07` git tag (confirmed by diff). The two internal refactors this version touched
+(DESC-placement logic, route exception handling) were each verified behavior-preserving by running
+the full test suite before and after, plus a live end-to-end smoke test confirming
+`PPID | DESC | TS# | ...` ordering is unchanged. No output-affecting behavior changed this version
+by design - V1.08 is explicitly scoped to stabilization, not features.
