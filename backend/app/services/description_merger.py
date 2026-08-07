@@ -12,6 +12,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from app.models.constants import MISSING_VALUE
+from app.utils.df_helpers import insert_column_after
 from app.utils.excel_io import InvalidExcelFormatError
 
 # Cap on how many duplicate/unmatched PPIDs are echoed back in an error
@@ -57,24 +58,20 @@ def merge_description(rows_df: pd.DataFrame, desc_df: pd.DataFrame) -> MergeResu
 
     lookup = dict(zip(desc_lookup["PPID"], desc_lookup["DESC"]))
 
-    merged = rows_df.copy()
-    ppid_series = merged["PPID"].astype(str).str.strip()
-    merged["DESC"] = ppid_series.map(lookup)
+    ppid_series = rows_df["PPID"].astype(str).str.strip()
+    desc_values = ppid_series.map(lookup)
+    desc_values = desc_values.where(desc_values.notna(), MISSING_VALUE)
 
     unique_ppids = ppid_series.unique().tolist()
     matched_ppids = [p for p in unique_ppids if p in lookup]
     unmatched_ppids = sorted(p for p in unique_ppids if p not in lookup)
 
-    merged["DESC"] = merged["DESC"].where(merged["DESC"].notna(), MISSING_VALUE)
-
     # V1.07: DESC always displays/exports immediately after PPID, not at the
-    # end - reorder here so every consumer (the /api/add-description
-    # response, and /api/export once it reads this same column order) gets
-    # it right without having to know the rule itself. PPID is guaranteed
-    # present in `cols` here (checked at the top of this function).
-    cols = [c for c in merged.columns if c != "DESC"]
-    cols.insert(cols.index("PPID") + 1, "DESC")
-    merged = merged[cols]
+    # end - so every consumer (the /api/add-description response, and
+    # /api/export once it reads this same column order) gets it right
+    # without having to know the rule itself. Shared with /api/export's
+    # placement logic via insert_column_after (see app/utils/df_helpers.py).
+    merged = insert_column_after(rows_df, "DESC", desc_values.to_numpy(), after="PPID")
 
     return MergeResult(
         df=merged,

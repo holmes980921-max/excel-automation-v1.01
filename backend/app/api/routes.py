@@ -26,9 +26,11 @@ from app.models.schemas import (
     ExportRequest,
     ExportResponse,
 )
+from app.api.error_handling import handle_route_errors
 from app.services.description_merger import merge_description
 from app.services.excel_transformer import ExcelTransformer
 from app.services import rule_manager
+from app.utils.df_helpers import find_insert_position
 from app.utils.excel_io import (
     InvalidExcelFormatError,
     dataframe_to_xlsx_bytes,
@@ -42,7 +44,6 @@ from app.utils.perf import PeakMemorySampler
 router = APIRouter(prefix="/api", tags=["excel"])
 
 app_log = get_logger("application")
-error_log = get_logger("error")
 perf_log = get_logger("performance")
 
 # Generous but finite: without a cap, `await file.read()` would happily try
@@ -50,6 +51,29 @@ perf_log = get_logger("performance")
 # crash/OOM risk (not just a slow request) - see the V1.05 reliability
 # review. 300k rows of the app's typical row width lands well under this.
 MAX_UPLOAD_SIZE_BYTES = 250 * 1024 * 1024  # 250 MB
+
+
+async def _read_validated_upload(file: UploadFile, *, context: str) -> bytes:
+    """Filename/emptiness/size-cap validation shared by every route that
+    accepts an excel upload (previously duplicated between convert_excel
+    and add_description). Raises the same 400/413 HTTPExceptions either
+    route already raised on its own.
+    """
+    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xls")):
+        raise HTTPException(status_code=400, detail="Please upload a .xls, .xlsx, or .xlsm file.")
+
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+    if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        size_mb = len(file_bytes) / (1024 * 1024)
+        limit_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
+        app_log.warning("Rejected oversized %s: %.1f MB (limit %.0f MB)", context, size_mb, limit_mb)
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is too large ({size_mb:.0f} MB). The limit is {limit_mb:.0f} MB.",
+        )
+    return file_bytes
 
 
 def _output_filename(original_filename: str | None) -> str:
@@ -104,55 +128,31 @@ async def convert_excel(
     file: UploadFile = File(...),
     debug: bool = Query(False, description="Include timing/memory/engine diagnostics in the response."),
 ) -> ConvertResponse:
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xls")):
-        raise HTTPException(status_code=400, detail="Please upload a .xls, .xlsx, or .xlsm file.")
-
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
-        size_mb = len(file_bytes) / (1024 * 1024)
-        limit_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
-        app_log.warning("Rejected oversized upload: %.1f MB (limit %.0f MB)", size_mb, limit_mb)
-        raise HTTPException(
-            status_code=413,
-            detail=f"File is too large ({size_mb:.0f} MB). The limit is {limit_mb:.0f} MB.",
-        )
-
+    file_bytes = await _read_validated_upload(file, context="upload")
     app_log.info("Conversion requested: %.2f MB file", len(file_bytes) / (1024 * 1024))
 
     debug_extra: dict[str, object] = {}
     stages: dict[str, float] = {}
     transformer = ExcelTransformer()
     try:
-        with PeakMemorySampler() as sampler:
-            t0 = time.perf_counter()
-            raw_rows = read_raw_rows(file_bytes, debug_info=debug_extra if debug else None)
-            t1 = time.perf_counter()
-            stages["read_and_parse"] = t1 - t0
+        with handle_route_errors("conversion", unexpected_detail="An unexpected error occurred while processing your file."):
+            with PeakMemorySampler() as sampler:
+                t0 = time.perf_counter()
+                raw_rows = read_raw_rows(file_bytes, debug_info=debug_extra if debug else None)
+                t1 = time.perf_counter()
+                stages["read_and_parse"] = t1 - t0
 
-            result_df = transformer.transform(raw_rows)
-            t2 = time.perf_counter()
-            stages["transform"] = t2 - t1
-        peak_mb = sampler.peak_mb
-    except InvalidExcelFormatError as exc:
-        app_log.info("Conversion rejected (invalid format): %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 - last line of defense, see main.py's handler too
-        error_log.error("Unexpected error during conversion", exc_info=exc)
-        raise HTTPException(
-            status_code=500, detail="An unexpected error occurred while processing your file."
-        ) from exc
+                result_df = transformer.transform(raw_rows)
+                t2 = time.perf_counter()
+                stages["transform"] = t2 - t1
+            peak_mb = sampler.peak_mb
+
+            response = _build_response(
+                transformer, result_df, _output_filename(file.filename), stages, debug, debug_extra, peak_mb
+            )
     finally:
         # Nothing was written to disk, but drop the buffer reference promptly anyway.
         del file_bytes
-
-    try:
-        response = _build_response(
-            transformer, result_df, _output_filename(file.filename), stages, debug, debug_extra, peak_mb
-        )
-    except InvalidExcelFormatError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     perf_log.info(
         "Conversion completed: %d rows -> %d rows in %.2fs (%.1f MB peak)",
@@ -176,7 +176,7 @@ async def convert_text(
 
     stages: dict[str, float] = {}
     transformer = ExcelTransformer()
-    try:
+    with handle_route_errors("paste conversion", unexpected_detail="An unexpected error occurred while processing your data."):
         with PeakMemorySampler() as sampler:
             t0 = time.perf_counter()
             raw_rows = parse_pasted_text(payload.text)
@@ -187,21 +187,10 @@ async def convert_text(
             t2 = time.perf_counter()
             stages["transform"] = t2 - t1
         peak_mb = sampler.peak_mb
-    except InvalidExcelFormatError as exc:
-        app_log.info("Conversion rejected (invalid format): %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001
-        error_log.error("Unexpected error during paste conversion", exc_info=exc)
-        raise HTTPException(
-            status_code=500, detail="An unexpected error occurred while processing your data."
-        ) from exc
 
-    try:
         response = _build_response(
             transformer, result_df, "pasted_converted.xlsx", stages, debug, {"engine_used": "paste"}, peak_mb
         )
-    except InvalidExcelFormatError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     perf_log.info(
         "Paste conversion completed: %d rows -> %d rows in %.2fs", len(raw_rows), response.total_rows, sum(stages.values())
@@ -221,7 +210,9 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
     if not payload.rows:
         raise HTTPException(status_code=400, detail="No rows to export.")
 
-    try:
+    with handle_route_errors(
+        "export", unexpected_status=400, unexpected_detail="Could not export the provided data - it may be malformed."
+    ):
         raw_df = pd.DataFrame(payload.rows)
         has_desc = "DESC" in raw_df.columns
         df = raw_df.reindex(columns=FULL_OUTPUT_COLUMNS)
@@ -234,10 +225,9 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
         # find PPID's position before renaming so DESC can be inserted right
         # after it, matching the Preview grid exactly (V1.07: "Preview =
         # Export"). Falls back to appending at the end if PPID isn't part of
-        # the active rule's output columns (no natural anchor to insert after).
-        ppid_position = (
-            list(shaped.df.columns).index("PPID") + 1 if "PPID" in shaped.df.columns else shaped.df.shape[1]
-        )
+        # the active rule's output columns (no natural anchor to insert
+        # after) - same helper description_merger.py uses for the same rule.
+        ppid_position = find_insert_position(shaped.df.columns, "PPID")
 
         renamed_df = shaped.df.copy()
         renamed_df.columns = shaped.headers
@@ -249,13 +239,6 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
             renamed_df.insert(ppid_position, "DESC", raw_df["DESC"].to_numpy())
 
         output_bytes = dataframe_to_xlsx_bytes(renamed_df)
-    except HTTPException:
-        raise
-    except Exception as exc:  # noqa: BLE001 - malformed client-supplied `rows`/`rule` shouldn't 500 opaquely
-        error_log.error("Unexpected error during export", exc_info=exc)
-        raise HTTPException(
-            status_code=400, detail="Could not export the provided data - it may be malformed."
-        ) from exc
 
     filename = payload.filename if payload.filename.lower().endswith(".xlsx") else f"{payload.filename}.xlsx"
     app_log.info("Export completed: %d rows, %.2f MB", len(renamed_df), len(output_bytes) / (1024 * 1024))
@@ -276,20 +259,7 @@ async def add_description(
     previously-merged result) so re-running with a different description
     file never stacks DESC values.
     """
-    if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xls")):
-        raise HTTPException(status_code=400, detail="Please upload a .xls, .xlsx, or .xlsm file.")
-
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-    if len(file_bytes) > MAX_UPLOAD_SIZE_BYTES:
-        size_mb = len(file_bytes) / (1024 * 1024)
-        limit_mb = MAX_UPLOAD_SIZE_BYTES / (1024 * 1024)
-        app_log.warning("Rejected oversized description upload: %.1f MB (limit %.0f MB)", size_mb, limit_mb)
-        raise HTTPException(
-            status_code=413,
-            detail=f"File is too large ({size_mb:.0f} MB). The limit is {limit_mb:.0f} MB.",
-        )
+    file_bytes = await _read_validated_upload(file, context="description upload")
 
     try:
         rows_data = json.loads(rows)
@@ -299,17 +269,14 @@ async def add_description(
         raise HTTPException(status_code=400, detail="No rows to merge.")
 
     try:
-        desc_df = read_description_file(file_bytes)
-        rows_df = pd.DataFrame(rows_data)
-        result = merge_description(rows_df, desc_df)
-    except InvalidExcelFormatError as exc:
-        app_log.info("Add Description rejected: %s", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:  # noqa: BLE001 - malformed client-supplied `rows` shouldn't 500 opaquely
-        error_log.error("Unexpected error during description merge", exc_info=exc)
-        raise HTTPException(
-            status_code=400, detail="Could not merge the description file - it may be malformed."
-        ) from exc
+        with handle_route_errors(
+            "description merge",
+            unexpected_status=400,
+            unexpected_detail="Could not merge the description file - it may be malformed.",
+        ):
+            desc_df = read_description_file(file_bytes)
+            rows_df = pd.DataFrame(rows_data)
+            result = merge_description(rows_df, desc_df)
     finally:
         del file_bytes
 
