@@ -5,7 +5,7 @@ Value excel export into a flat table - one row per `TS#` block - and lets you cu
 columns appear, in what order, and under what display name, entirely through the UI (no code
 changes required).
 
-**Current version: V1.06** (see the in-app **About** dialog, under the Settings menu, for the
+**Current version: V1.07** (see the in-app **About** dialog, under the Settings menu, for the
 live version/build info - the header intentionally no longer hardcodes a version string)
 
 ## Quick Start (Windows)
@@ -22,6 +22,28 @@ manual setup required. See [Developer Experience](#developer-experience) below f
 [Troubleshooting](#troubleshooting) if something doesn't come up.
 
 ## Features
+
+### Desktop-Quality UX (V1.07)
+- **Home screen** - the application's starting point. No "Upload" click needed first: drag & drop
+  a file, click to browse, or paste directly (Ctrl+V) into the two-panel Home layout, then
+  **Convert**. Replaces the old modal upload dialog entirely.
+- **Home navigation** - a **Home** button (top-left, always visible) returns to the Home screen at
+  any time. If a conversion result exists, a confirmation ("Return to Home? Current session will
+  be discarded.") appears first - nothing is silently lost.
+- **Abort** - while a conversion is in flight, an **Abort** button appears on the processing
+  overlay. Confirming ("Abort current conversion? Unfinished results will be discarded.") cancels
+  the in-flight request via `AbortController` and returns cleanly to the Home screen - no partial
+  or inconsistent state.
+- **Workflow badges** - a slim status strip (✅ Converted, ✅ Description Applied, ✅ Ready to Save)
+  gives an at-a-glance read of where you are in the workflow, shown once a conversion exists.
+- **DESC immediately after PPID** - the Add Description column now displays (and exports) as
+  `PPID | DESC | TS# | ...` instead of appended at the end.
+- **Preview = Export** - the column order shown in the grid always matches exactly what
+  Quick Save/Save As produce, including with a custom Transformation Rule active. Verified by a
+  dedicated regression test, not just visual inspection.
+- Data-dependent toolbar controls (Add Description, Quick Save, Save As, Preview Rows, Search,
+  Transformation Rules) are hidden until there's a conversion result - the toolbar only ever shows
+  actions that are actually possible right now.
 
 ### Productivity & User Experience (V1.06)
 - **Add Description** - after converting, optionally upload a Description excel file (`PPID`,
@@ -120,12 +142,12 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Backend (pytest, 51 tests)
+# Backend (pytest, 55 tests)
 cd backend
 ./.venv/Scripts/pip install -r requirements-dev.txt
 ./.venv/Scripts/python.exe -m pytest                              # or: pytest --cov=app --cov-report=term-missing
 
-# Frontend (Vitest, 37 tests)
+# Frontend (Vitest, 52 tests)
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
 ```
@@ -149,9 +171,23 @@ cd backend
 Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`. See
 [PERFORMANCE_BENCHMARK_V1.05.md](./PERFORMANCE_BENCHMARK_V1.05.md) for the V1.04-vs-V1.05 results.
 
+## Home Screen Guide
+
+1. Launch the app - you land directly on the **Home** screen (no Upload click needed).
+2. Either **drag & drop** a `.xls`/`.xlsx`/`.xlsm` file onto the Upload panel (or click it to
+   browse), or click into the Paste panel and **Ctrl+V** a range copied from Excel. Using one
+   clears the other, so there's never ambiguity about which input Convert will use.
+3. Click **Convert**. A processing overlay shows progress; click **Abort** if you need to cancel
+   (a confirmation appears before anything is actually discarded).
+4. Once converted, you're on the Preview screen - the toolbar now shows Quick Save/Save As/Add
+   Description/Preview Rows/Search, and workflow badges confirm what's been done.
+5. Click **Home** (top-left) at any time to start over with a different file - if you have an
+   active conversion, you'll be asked to confirm first.
+
 ## Rule Editor Guide
 
-0. The Rule Editor is hidden by default (V1.05 simplifies the everyday UI). Open the **Settings**
+0. The Rule Editor is hidden by default (V1.05 simplifies the everyday UI) and only appears once
+   you have a conversion result (V1.07). Open the **Settings**
    menu (top-right) and turn on **Show Advanced Features** to reveal the **Transformation Rules**
    toolbar button - nothing about the feature itself changed, it's just not shown until asked for.
 1. Click **Transformation Rules** in the toolbar to open/close the rule panel (open by default).
@@ -283,6 +319,13 @@ The Description file needs a `PPID` column and a `DESC` (or `Description`) colum
 header name regardless of position. `PPID` must be unique in the Description file - if it isn't,
 the error message lists which `PPID`s repeat so you can fix the source file.
 
+**I clicked Abort but the backend window still looks busy for a moment.**
+Abort cancels the browser's request immediately (the UI returns to Home right away, and the
+in-flight response is discarded when it eventually arrives) - it does not interrupt the backend's
+in-progress computation, which keeps running to completion server-side and simply has its result
+ignored. At this app's target scale (sub-2s conversions, per the V1.05 benchmark) this is not
+user-visible; genuinely interrupting server-side work is reserved for V1.08 (reliability).
+
 **Save As doesn't open a native folder picker.**
 The OS-native Save dialog uses the browser's File System Access API, which only Chromium-based
 browsers (Chrome, Edge) implement. On Firefox/Safari, Save As falls back to the same behavior as
@@ -302,6 +345,7 @@ excel-automation-v1.01/
 ├── TEST_COVERAGE_V1.05.md          # Backend/frontend coverage breakdown
 ├── CODE_REVIEW_V1.05.md            # Architecture/performance/reliability/... review + score
 ├── CODE_REVIEW_V1.06.md            # V1.06 review + score (Add Description, Preview Rows, Save UX)
+├── CODE_REVIEW_V1.07.md            # V1.07 review + score (Home screen, Abort, DESC placement, Preview=Export)
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app entry, CORS, logging setup, global exception handler
@@ -320,23 +364,26 @@ excel-automation-v1.01/
 │   ├── scripts/
 │   │   ├── make_mock.py               # Production-like mock data generator (.xlsx and .xls)
 │   │   └── benchmark.py               # Performance benchmark harness (timing + peak memory + throughput)
-│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 51 tests
+│   ├── tests/                         # pytest suite (run: pytest, from backend/) - 55 tests
 │   ├── requirements.txt
 │   └── requirements-dev.txt           # xlwt (mock .xls fixtures), pytest, pytest-cov, httpx (TestClient)
 └── frontend/
     ├── app/
-    │   ├── page.tsx                   # Toolbar / split view (Rule Editor + Grid) / status bar
+    │   ├── page.tsx                   # Toolbar / Home-or-(Rule Editor + Grid) / status bar / session state
     │   ├── layout.tsx                 # MUI SSR cache provider (AppRouterCacheProvider) + providers
     │   └── globals.css
     ├── components/
     │   ├── AppProviders.tsx           # MUI theme + Sonner toaster (errors/warnings only)
-    │   ├── AppToolbar.tsx             # Upload / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
+    │   ├── AppToolbar.tsx             # Home / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
     │   ├── StatusBar.tsx              # Rows/Columns/matches/Rule + Description stats + completion feedback + Debug metrics
-    │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA
+    │   ├── WorkflowBadges.tsx         # V1.07: Converted / Description Applied / Ready to Save status strip
+    │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA, Abort
     │   ├── AboutDialog.tsx            # App name/version/git tag/build date/backend+frontend framework
-    │   ├── UploadDialog.tsx           # File (react-dropzone, .xls/.xlsx/.xlsm) or paste input
+    │   ├── HomeScreen.tsx             # V1.07: application entry point - drag & drop / paste / Convert, replaces UploadDialog
     │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID
     │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
+    │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
+    │   ├── AbortConfirmDialog.tsx     # V1.07: confirm before cancelling an in-flight conversion
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
     │   └── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices)
     ├── lib/
@@ -348,7 +395,7 @@ excel-automation-v1.01/
     │   ├── filename.ts                # V1.06: default save filename (RCC_converted_YYMMDD_HHMMSS.xlsx)
     │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE for the About dialog
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 37 tests
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 52 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -383,6 +430,11 @@ concerns independent and separately testable.
   dataset, a Large Dataset Warning before rendering everything, and Quick Save/Save As (replacing
   Download) with an auto-generated timestamped filename. See
   [CODE_REVIEW_V1.06.md](./CODE_REVIEW_V1.06.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.07** - Desktop-quality UX: a dedicated Home screen (drag & drop / paste / Convert, no
+  Upload click needed) replacing the modal upload dialog, Home navigation with a discard
+  confirmation, Abort for in-flight conversions, workflow status badges, DESC repositioned
+  immediately after PPID, and a guaranteed Preview = Export column-order match. See
+  [CODE_REVIEW_V1.07.md](./CODE_REVIEW_V1.07.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -412,3 +464,10 @@ the Rule Editor moving behind an Advanced toggle is a default-visibility change,
 and never touches the transformation engine) - confirmed by diff, not just assertion. The plain
 convert → download flow (no Add Description, default Preview Rows) is unchanged; Add Description
 and the save-flow rename are purely additive.
+
+**V1.07**: `excel_transformer.py`, `constants.py`, and `rule_manager.py` remain byte-identical to
+the `v1.06` git tag (confirmed by diff) - V1.07 is scoped to UX only, per its own spec, and the
+conversion/rule-shaping engines were not touched. The DESC column's *position* changed (now
+immediately after PPID, was previously appended at the end) - this is an explicitly requested
+behavior change for V1.07, not a regression; DESC's *values* and the underlying conversion output
+are otherwise identical.

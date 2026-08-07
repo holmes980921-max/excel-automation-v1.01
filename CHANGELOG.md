@@ -1,5 +1,59 @@
 # Changelog
 
+## v1.07 - User Experience & Workflow
+
+### Release Notes
+
+V1.07 is a UX-only release (per its own spec, internal refactoring/reliability/performance work is
+deliberately reserved for V1.08). The application now opens directly onto a **Home screen** - drag
+& drop, browse, or paste (Ctrl+V) and Convert, no separate Upload click or modal needed. A **Home**
+button always returns there, confirming first if it would discard an active session. In-flight
+conversions can now be **Aborted** (with a confirmation), and a slim **workflow badge** strip
+(Converted / Description Applied / Ready to Save) gives an at-a-glance read of progress. The
+Add Description column now displays and exports immediately after `PPID` instead of at the end,
+and the Preview grid's column order is now guaranteed to exactly match the exported file's
+("Preview = Export"), verified by a dedicated regression test. Full detail:
+[CODE_REVIEW_V1.07.md](./CODE_REVIEW_V1.07.md).
+
+### Added
+- `HomeScreen` component - the application's new starting point: a two-panel drag & drop /
+  paste layout with a Convert button, replacing the modal `UploadDialog` (deleted this version)
+- `AbortController`-based cancellation for `/api/convert`/`/api/convert-text` - `lib/api.ts`'s
+  `convertFile`/`convertText` accept an optional `AbortSignal`; an `AbortError` is treated as a
+  silent user-initiated cancel, not a failure (no error toast)
+- `AbortConfirmDialog` - "Abort current conversion? Unfinished results will be discarded." /
+  Abort / Continue - shown when Abort is clicked on the processing overlay
+- `ReturnHomeDialog` - "Return to Home? Current session will be discarded." / Home / Stay -
+  shown when the new Home button is clicked while a conversion result exists
+- `WorkflowBadges` component - Converted / Description Applied / Ready to Save status chips,
+  shown once a conversion exists
+- `ExcelGrid`'s `extraColumns` gained an `insertAfterField` option, used to splice the `DESC`
+  column in right after `PPID` instead of appending it at the end
+- 4 new backend tests (DESC-after-PPID ordering in both `/api/add-description` and `/api/export`,
+  including with a column-reordering rule active) and 15 new frontend tests (`WorkflowBadges`,
+  `ReturnHomeDialog`, `AbortConfirmDialog`, and `HomeScreen`'s paste-conversion path)
+
+### Changed
+- `description_merger.py`'s `merge_description()` now places `DESC` immediately after `PPID` in
+  its output (was appended at the end) - both `/api/add-description`'s response and
+  `/api/export`'s output reflect this, so the Preview grid and the saved file always agree
+  ("Preview = Export")
+- `/api/export` now inserts `DESC` at `PPID`'s position within the *active rule's* shaped output
+  (not just the default column order), so this holds even with a custom Transformation Rule
+- Toolbar: **Upload** button replaced by **Home** (top-left); Add Description/Quick Save/Save
+  As/Preview Rows/Search/Transformation Rules are now hidden entirely until a conversion result
+  exists, instead of being shown-but-disabled
+- `ProcessingOverlay` gained an optional `onAbortClick` prop that renders an Abort button
+
+### Removed
+- `UploadDialog.tsx` - fully superseded by `HomeScreen.tsx`
+
+### Known limitations
+- Abort cancels the browser's in-flight request immediately, but does not interrupt the backend's
+  already-started computation server-side (its result is simply discarded when it arrives) - not
+  user-visible at this app's target scale (sub-2s conversions), genuine server-side cancellation
+  is reserved for V1.08 (reliability)
+
 ## v1.06 - Productivity & User Experience
 
 ### Release Notes
