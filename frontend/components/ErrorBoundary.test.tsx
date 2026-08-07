@@ -58,4 +58,39 @@ describe("ErrorBoundary", () => {
 
     Object.defineProperty(window, "location", { configurable: true, value: originalLocation });
   });
+
+  it("Show Log opens the Error Log Viewer with the caught error's detail", async () => {
+    render(
+      <ErrorBoundary>
+        <Bomb />
+      </ErrorBoundary>
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /show log/i }));
+
+    expect(await screen.findByText("Error Log")).toBeInTheDocument();
+    expect(screen.getByText(/Error Message: boom/)).toBeInTheDocument();
+    expect(screen.getByText(/Operation: UI Rendering/)).toBeInTheDocument();
+    expect(screen.getByText(/Developer Contact: jong10k\.kim/)).toBeInTheDocument();
+  });
+
+  it("Copy Log writes the formatted log to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(
+      <ErrorBoundary>
+        <Bomb />
+      </ErrorBoundary>
+    );
+    fireEvent.click(screen.getByRole("button", { name: /show log/i }));
+    await screen.findByText("Error Log");
+    fireEvent.click(screen.getByRole("button", { name: /copy log/i }));
+
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toContain("Error Message: boom");
+  });
 });
