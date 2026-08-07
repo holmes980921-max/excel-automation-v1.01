@@ -67,6 +67,15 @@ def merge_description(rows_df: pd.DataFrame, desc_df: pd.DataFrame) -> MergeResu
 
     merged["DESC"] = merged["DESC"].where(merged["DESC"].notna(), MISSING_VALUE)
 
+    # V1.07: DESC always displays/exports immediately after PPID, not at the
+    # end - reorder here so every consumer (the /api/add-description
+    # response, and /api/export once it reads this same column order) gets
+    # it right without having to know the rule itself. PPID is guaranteed
+    # present in `cols` here (checked at the top of this function).
+    cols = [c for c in merged.columns if c != "DESC"]
+    cols.insert(cols.index("PPID") + 1, "DESC")
+    merged = merged[cols]
+
     return MergeResult(
         df=merged,
         matched_count=len(matched_ppids),

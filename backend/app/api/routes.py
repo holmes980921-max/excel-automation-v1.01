@@ -230,6 +230,15 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
         if shaped.df.shape[1] == 0:
             raise HTTPException(status_code=400, detail="The selected rule has no output columns.")
 
+        # shaped.df's columns are still the internal (pre-alias) names here -
+        # find PPID's position before renaming so DESC can be inserted right
+        # after it, matching the Preview grid exactly (V1.07: "Preview =
+        # Export"). Falls back to appending at the end if PPID isn't part of
+        # the active rule's output columns (no natural anchor to insert after).
+        ppid_position = (
+            list(shaped.df.columns).index("PPID") + 1 if "PPID" in shaped.df.columns else shaped.df.shape[1]
+        )
+
         renamed_df = shaped.df.copy()
         renamed_df.columns = shaped.headers
         # DESC (V1.06 Add Description) sits outside the fixed rule column
@@ -237,7 +246,7 @@ async def export_rows(payload: ExportRequest) -> ExportResponse:
         # regardless of which rule is active, since it isn't a
         # rule-shapeable field.
         if has_desc:
-            renamed_df["DESC"] = raw_df["DESC"].to_numpy()
+            renamed_df.insert(ppid_position, "DESC", raw_df["DESC"].to_numpy())
 
         output_bytes = dataframe_to_xlsx_bytes(renamed_df)
     except HTTPException:
@@ -312,7 +321,7 @@ async def add_description(
     )
 
     return AddDescriptionResponse(
-        columns=list(rows_df.columns) + ["DESC"],
+        columns=list(result.df.columns),  # DESC already inserted right after PPID by merge_description()
         rows=result_rows,
         total_rows=len(result_rows),
         matched_count=result.matched_count,
