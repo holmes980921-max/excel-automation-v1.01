@@ -20,6 +20,22 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "V1.11",
+    date: "2026-08-10",
+    title: "User Guide & Support",
+    new: [
+      "Help & Support: User Guide, FAQ, Troubleshooting, and Error Details, all in one place from the toolbar",
+      "Show Details on a failed conversion or Add Description merge - the same diagnostic log/Copy Log as a full-page error, now available for everyday failures too",
+    ],
+    improved: [
+      "Documentation content lives in editable Markdown files, separate from the application code",
+    ],
+    fixed: [],
+    knownIssues: [
+      "A validation error whose message reflects your own data (e.g. a duplicate-PPID list) intentionally does not offer Show Details - the message itself already contains everything the log would (see CODE_REVIEW_V1.11.md)",
+    ],
+  },
+  {
     version: "V1.10",
     date: "2026-08-09",
     title: "Browser Edition",

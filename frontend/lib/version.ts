@@ -7,9 +7,9 @@
  * be injected automatically at build time (e.g. from `git describe --tags`
  * and the build timestamp) instead of hand-edited here.
  */
-export const FRONTEND_VERSION = "1.10.0";
-export const GIT_TAG = "v1.10";
-export const BUILD_DATE = "2026-08-09";
+export const FRONTEND_VERSION = "1.11.0";
+export const GIT_TAG = "v1.11";
+export const BUILD_DATE = "2026-08-10";
 
 /** V1.10: a temporary Browser Edition (GitHub Pages, no backend) run
  * alongside the preserved Python/FastAPI V1.09 release - see

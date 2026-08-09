@@ -47,6 +47,24 @@ automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 
 ## Features
 
+### User Guide & Support (V1.11)
+- **Help & Support** - a toolbar button (always visible, including from the Home screen) opens
+  **User Guide**, **FAQ**, **Troubleshooting**, and **Error Details**, all in one dialog. Content
+  is fetched from plain Markdown files under `frontend/public/docs/` at runtime - editable
+  directly on GitHub without touching any React/TypeScript, and included automatically in the
+  static export.
+- **Input Data guidance is now explicit about the normal RCC workflow**: download from RCC, copy
+  the downloaded data, paste it into RCC Excel Automation - with a documented Ctrl+A/Ctrl+C
+  fallback for when a direct clipboard paste doesn't register.
+- **Show Details on everyday failures, not just full-page crashes.** A failed Convert or Add
+  Description now offers the same diagnostic log (timestamp, version, message, stack trace,
+  browser/OS info) and **Copy Log** action that `ErrorBoundary`'s crash screen already had - not
+  offered for a validation error whose message already reflects the user's own data (e.g. a
+  duplicate-PPID list), since a copyable log would otherwise just duplicate that same list. See
+  [CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md) for the full reasoning.
+- No conversion logic changed this version - see the Regression section of
+  [CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md).
+
 ### Browser Edition (V1.10)
 - **Runs entirely in the browser, deployed as a static site to GitHub Pages.** No backend, no
   database, nothing uploaded to any server - conversion, rule shaping, Add Description, and
@@ -227,7 +245,7 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Frontend (Vitest, 150 tests) - the only test suite that matters for this branch
+# Frontend (Vitest, 170 tests) - the only test suite that matters for this branch
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
 npm run lint
@@ -357,12 +375,23 @@ not addressed speculatively. Once this branch is deployed and used with real dat
 
 ## Reporting a Problem
 
+Click **Help & Support** in the toolbar (always available) for the **User Guide**, **FAQ**,
+**Troubleshooting**, and **Error Details** - see
+[`frontend/public/docs/`](./frontend/public/docs/) for the actual content (plain Markdown,
+editable on GitHub without touching any application code).
+
 If something unexpected happens (a genuine bug, not a validation message like "File is too
-large"), the app shows a recovery screen with a **Show Log** button. That opens a plain-text log
-(timestamp, app version, operation, error message/stack trace, environment info) with a **Copy
-Log** button - paste it into your bug report along with what you were doing. The log never
-includes any converted data (PPID/excel content) - only technical/environment details. A developer
-contact (`jong10k.kim`) is shown in the same dialog.
+large"), a **Show Details** action appears next to the error - whether it's a full-page crash
+(`ErrorBoundary`'s recovery screen, historically called "Show Log") or an everyday failed
+Convert/Add Description (V1.11). That opens a plain-text log (timestamp, app version, operation,
+error message/stack trace, browser/OS info) with a **Copy Log** button - paste it into your bug
+report along with what you were doing. The log never includes any converted data (PPID/TS#/DESC/
+excel content) - only technical/environment details. **Show Details is intentionally not offered
+for a validation error whose message already reflects your own data** (e.g. "Description file has
+duplicate PPID(s): ...") - the on-screen message already contains everything a copyable log would,
+so nothing is withheld, only avoided as a redundant second copy of the same data (see
+[CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md)). A developer contact (`jong10k.kim`) is shown in
+the same dialog and in Help & Support's Error Details tab.
 
 ## Release Notes
 
@@ -539,6 +568,7 @@ excel-automation-v1.01/
 ├── TEST_COVERAGE_V1.08.md          # Backend/frontend coverage breakdown
 ├── CODE_REVIEW_V1.09.md            # V1.09 review + score (Home reset fix, Remove/Clear, Error Log, Release Notes)
 ├── CODE_REVIEW_V1.10.md            # V1.10 review + score (Browser Edition migration, JS/Python parity regression)
+├── CODE_REVIEW_V1.11.md            # V1.11 review + score (Help & Support, Error Details privacy gating)
 ├── backend/                        # Preserved V1.09 Python/FastAPI implementation - not used by this branch's
 │                                    # running app; kept only as the source of truth for the regression fixtures
 │                                    # in frontend/lib/converter/__fixtures__/ (see Architecture above)
@@ -575,20 +605,28 @@ excel-automation-v1.01/
     │   ├── ErrorBoundary.tsx          # Top-level UI recovery after an unexpected render error; V1.09: Show Log
     │   ├── ErrorLogDialog.tsx         # V1.09: timestamp/version/operation/message/stack/env + Copy Log + dev contact
     │   ├── ReleaseNotesDialog.tsx     # V1.09: New/Improved/Fixed/Known Issues per version
-    │   ├── AppToolbar.tsx             # Home / Release Notes / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
+    │   ├── HelpSupportDialog.tsx      # V1.11: User Guide / FAQ / Troubleshooting / Error Details, tabbed
+    │   ├── MarkdownDoc.tsx            # V1.11: fetches + renders a public/docs/*.md file with MUI-styled components
+    │   ├── AppToolbar.tsx             # Home / Release Notes / Help & Support / Quick Save / Save As / Add Description / Preview Rows / Search / Settings
     │   ├── StatusBar.tsx              # Rows/Columns/matches/Rule + Description stats + completion feedback + Debug metrics
     │   ├── WorkflowBadges.tsx         # V1.07: Converted / Description Applied / Ready to Save status strip
     │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA, Abort
-    │   ├── AboutDialog.tsx            # App name/version/git tag/build date/backend+frontend framework
-    │   ├── HomeScreen.tsx             # Application entry point - drag & drop / paste / Convert; V1.09: Remove/Clear before converting
-    │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID; V1.09: Remove selected file
+    │   ├── AboutDialog.tsx            # App name/version/git tag/build date/edition
+    │   ├── HomeScreen.tsx             # Application entry point - drag & drop / paste / Convert; V1.11: Show Details on failure
+    │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID; V1.11: Show Details on failure
     │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
     │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
     │   ├── AbortConfirmDialog.tsx     # V1.07: confirm before cancelling an in-flight conversion
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
     │   └── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices)
+    ├── public/docs/                  # V1.11: Help & Support content - plain Markdown, editable on GitHub,
+    │   ├── USER_GUIDE.md              #   no React/TypeScript involved, served as-is by the static export
+    │   ├── FAQ.md                     #   (## headings become individual FAQ accordion entries - lib/faqParser.ts)
+    │   └── TROUBLESHOOTING.md
     ├── lib/
     │   ├── api.ts                     # V1.10: local-engine client (was a FastAPI fetch client through V1.09) - same public interface
+    │   ├── docsLoader.ts              # V1.11: fetches a public/docs/*.md file, basePath-aware
+    │   ├── faqParser.ts               # V1.11: splits FAQ.md's ## headings into individual Q&A entries
     │   ├── converter/                 # V1.10: the local conversion engine - see Architecture above
     │   │   ├── constants.ts           # Port of backend/app/models/constants.py
     │   │   ├── transformer.ts         # Port of backend/app/services/excel_transformer.py
@@ -597,7 +635,8 @@ excel-automation-v1.01/
     │   │   ├── dfHelpers.ts           # Port of backend/app/utils/df_helpers.py
     │   │   ├── excelIO.ts             # Port of backend/app/utils/excel_io.py (SheetJS + DOMParser instead of pandas)
     │   │   ├── engine.ts              # Orchestrates the above into convertFile/convertText/exportRows/addDescription*
-    │   │   ├── worker.ts              # Web Worker entry point - runs engine.ts off the main thread (real Abort)
+    │   │   ├── worker.ts              # Web Worker entry point - runs engine.ts off the main thread (real Abort);
+    │   │   │                          #   V1.11: tags a caught error's isValidationError for privacy-safe log gating
     │   │   ├── workerClient.ts        # Main-thread RPC client for worker.ts, used by lib/api.ts
     │   │   ├── regression.test.ts     # V1.09 (Python) vs V1.10 (JS) field-for-field parity, real fixture files
     │   │   └── __fixtures__/          # Real .xls/.xlsx files + Python-generated *.expected.json snapshots
@@ -607,13 +646,13 @@ excel-automation-v1.01/
     │   ├── searchFilter.ts            # V1.06: pure row-search predicate (search always runs on the full dataset)
     │   ├── filename.ts                # V1.06: default save filename (RCC_converted_YYMMDD_HHMMSS.xlsx)
     │   ├── pasteSummary.ts            # V1.08: lightweight row/column summary for a large paste, never renders the raw text
-    │   ├── errorLog.ts                # V1.09: builds/formats the Error Log Viewer's plain-text log entry
+    │   ├── errorLog.ts                # V1.09: builds/formats the Error Log Viewer's plain-text log entry; V1.11: toError() helper
     │   ├── releaseNotes.ts            # V1.09: Release Notes content - add one entry here per future version
     │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE/EDITION for the About dialog
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
     ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
-    ├── next.config.mjs                # V1.10: output: "export" + basePath for GitHub Pages
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 150 tests
+    ├── next.config.mjs                # V1.10: output: "export" + basePath for GitHub Pages; V1.11: NEXT_PUBLIC_BASE_PATH for docsLoader.ts
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 170 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -667,12 +706,18 @@ concerns independent and separately testable.
   Log Viewer (Show Log / Copy Log / developer contact) for unexpected errors; added an in-app
   Release Notes page. See [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md) and
   [CHANGELOG.md](./CHANGELOG.md).
-- **V1.10 (this branch)** - Browser Edition: the entire conversion pipeline ported to
-  JavaScript/TypeScript and moved into a Web Worker, running fully client-side with no backend;
-  deployed as a static site to GitHub Pages via GitHub Actions; Add Description gained Clipboard
-  Paste support (closing a real V1.09 gap); Abort now genuinely cancels an in-progress conversion.
-  The V1.09 Python/FastAPI implementation is preserved unchanged on `release/v1.09`. See
+- **V1.10** - Browser Edition: the entire conversion pipeline ported to JavaScript/TypeScript and
+  moved into a Web Worker, running fully client-side with no backend; deployed as a static site to
+  GitHub Pages via GitHub Actions; Add Description gained Clipboard Paste support (closing a real
+  V1.09 gap); Abort now genuinely cancels an in-progress conversion. The V1.09 Python/FastAPI
+  implementation is preserved unchanged on `release/v1.09`. See
   [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.11 (this branch)** - User Guide & Support: a **Help & Support** dialog (User Guide, FAQ,
+  Troubleshooting, Error Details) sourced from editable Markdown under `frontend/public/docs/`;
+  **Show Details** extended to everyday Convert/Add Description failures, not just full-page
+  crashes, with a privacy gate that withholds it for validation errors whose message already
+  reflects the user's own data. No conversion logic changed. See
+  [CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -734,3 +779,12 @@ column, and every field value matches a JSON snapshot generated directly from th
 `ExcelTransformer` (`backend/scripts/dump_transform_json.py`), field-for-field, not just spot
 checks. `lib/rules.ts`, `lib/filename.ts`, and every UI component not explicitly listed as changed
 in the V1.10 feature list above are byte-identical to `release/v1.09` - reused, not rewritten.
+
+**V1.11 (User Guide & Support)**: none of `frontend/lib/converter/` (the ported conversion engine)
+changed this version except `worker.ts`/`workerClient.ts`/`api.ts`'s error-reporting plumbing
+(propagating `isValidationError` - see CODE_REVIEW_V1.11.md's Architecture section), and two
+`InvalidExcelFormatError` classes gaining an explicit `.name` (no behavior change - existing
+`instanceof` checks and thrown messages are unaffected, confirmed by the full V1.10 test suite,
+including the Python-vs-JS regression suite, passing unmodified). `HomeScreen.tsx`'s and
+`AddDescriptionDialog.tsx`'s Convert/Merge logic itself is unchanged; only their `catch` blocks
+gained a conditional "Show Details" trigger.

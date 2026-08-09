@@ -3,6 +3,61 @@
 > Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
 > below for earlier versions use the name in effect at the time.
 
+## v1.11 - User Guide & Support
+
+### Release Notes
+
+V1.11 is a documentation and support/UX release - no conversion logic changed. It adds a **Help &
+Support** dialog (User Guide, FAQ, Troubleshooting, Error Details) reachable from the toolbar at
+all times, with content sourced from plain Markdown files under `frontend/public/docs/` so an
+administrator can edit questions, answers, and guide text directly on GitHub without touching any
+React/TypeScript. It also extends the existing Error Log Viewer ("Show Details") to everyday
+Convert/Add Description failures, not just full-page crashes - while adding a privacy gate that
+withholds it for a validation error whose message already reflects the user's own data (e.g. a
+duplicate-PPID list), so a copyable diagnostic log never contains business data. Full detail:
+[CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md).
+
+### Added
+- **Help & Support dialog** (`HelpSupportDialog.tsx`) - four tabs: User Guide, FAQ, Troubleshooting,
+  Error Details. User Guide/FAQ/Troubleshooting are fetched at runtime from
+  `frontend/public/docs/{USER_GUIDE,FAQ,TROUBLESHOOTING}.md` (`lib/docsLoader.ts`) and rendered
+  with `react-markdown`/`remark-gfm` through MUI-styled component mappings (`MarkdownDoc.tsx`), so
+  content matches the app's existing visual language rather than looking like raw HTML. FAQ's `##`
+  headings are split into individual accordion entries (`lib/faqParser.ts`).
+  Error Details is static documentation about the feature itself (not a live log viewer) - the
+  live diagnostic view stays contextual, right where an error actually happens.
+- **Show Details on everyday failures**: `HomeScreen.tsx` (failed Convert) and
+  `AddDescriptionDialog.tsx` (failed merge) now offer the same `ErrorLogDialog`/Copy Log flow
+  `ErrorBoundary`'s crash screen already had, via the same `buildErrorLogEntry` builder (new
+  `errorLog.ts` helper: `toError()`, normalizing a caught `unknown` into a real `Error`).
+- **Privacy gate for the diagnostic log** (spec requirement: logs must never contain business
+  data): `InvalidExcelFormatError` (in both `excelIO.ts` and `descriptionMerger.ts`) now sets
+  `this.name = "InvalidExcelFormatError"` explicitly; `worker.ts` checks this and tags its
+  response with `isValidationError`; `workerClient.ts`'s new `WorkerError` and `api.ts`'s
+  `ApiError` carry the flag across the Worker boundary (where class identity doesn't survive
+  `postMessage`'s structured clone). `HomeScreen.tsx`/`AddDescriptionDialog.tsx` skip offering
+  "Show Details" when `err.isValidationError` is true - the on-screen message (which may
+  legitimately echo back a duplicate-PPID list) already contains everything the log would.
+- Input Data documentation explicitly describes the normal RCC workflow (download → copy → paste)
+  and a Ctrl+A/Ctrl+C fallback for when a direct clipboard paste doesn't register.
+- 20 new tests: `docsLoader.test.ts`, `faqParser.test.ts`, `HelpSupportDialog.test.tsx`, new
+  Error Details describe blocks in `HomeScreen.test.tsx`/`AddDescriptionDialog.test.tsx` (both the
+  positive "Show Details appears" case and the negative "not offered for a validation error"
+  case), `toError()` tests in `errorLog.test.ts`, and `.name` regression guards in
+  `excelIO.test.ts`/`descriptionMerger.test.ts`.
+
+### Fixed
+- Two `page.test.tsx` tests carried an implicit 5000ms default timeout that intermittently failed
+  under coverage-instrumentation overhead (a known, previously-partially-fixed flake class from
+  V1.09) - the second test in that describe block now has the same explicit `10000`ms timeout the
+  first one already had.
+
+### Known limitations (disclosed, not fixed this version)
+- Show Details is intentionally never offered for a validation-class error - a deliberate scope
+  boundary, not an oversight (see Release Notes above).
+- Everything carried over unchanged from V1.10's own Known limitations (large-file performance,
+  Debug Mode's peak-memory figure, no live-browser interactive verification in this environment).
+
 ## v1.10 - Browser Edition
 
 ### Release Notes
