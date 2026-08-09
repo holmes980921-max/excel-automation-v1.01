@@ -5,11 +5,13 @@ import { useDropzone, type FileRejection } from "react-dropzone";
 import { Box, Button, Typography, TextField, Divider, IconButton, Tooltip } from "@mui/material";
 import { FileSpreadsheet, UploadCloud, XCircle, ClipboardPaste, Play, CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
-import { convertFile, convertText, type ConvertResponse } from "@/lib/api";
+import { convertFile, convertText, ApiError, type ConvertResponse } from "@/lib/api";
 import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
 import { summarizePastedText, type PasteSummary } from "@/lib/pasteSummary";
+import { buildErrorLogEntry, toError, type ErrorLogEntry } from "@/lib/errorLog";
 import ProcessingOverlay from "@/components/ProcessingOverlay";
 import AbortConfirmDialog from "@/components/AbortConfirmDialog";
+import ErrorLogDialog from "@/components/ErrorLogDialog";
 
 // MUI's multiline TextField has no height cap by default and will size
 // itself to fit every line of its value - fine for typed input, but a
@@ -36,6 +38,12 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
   const [pasteSummary, setPasteSummary] = useState<PasteSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // V1.11: lets a user see full diagnostic detail (and Copy Log) for a
+  // failed conversion, not just full-page crashes - reuses the same
+  // ErrorLogDialog/errorLog.ts infrastructure ErrorBoundary's "Show Log"
+  // already uses.
+  const [errorLogEntry, setErrorLogEntry] = useState<ErrorLogEntry | null>(null);
+  const [showErrorLog, setShowErrorLog] = useState(false);
   const [abortConfirmOpen, setAbortConfirmOpen] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const rawPasteTextRef = useRef("");
@@ -107,6 +115,7 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     abortControllerRef.current = controller;
     setLoading(true);
     setError(null);
+    setErrorLogEntry(null);
     try {
       const data = file
         ? await convertFile(file, debugMode, controller.signal)
@@ -123,6 +132,11 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
       }
       const message = err instanceof Error ? err.message : "Unexpected error during conversion.";
       setError(message);
+      // V1.11: not offered for a known validation failure - its message may
+      // already echo back the user's own data (see lib/api.ts's ApiError).
+      if (!(err instanceof ApiError && err.isValidationError)) {
+        setErrorLogEntry(buildErrorLogEntry({ error: toError(err, message), operation: "Conversion" }));
+      }
       toast.error(message);
     } finally {
       abortControllerRef.current = null;
@@ -308,9 +322,16 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
         </Box>
 
         {error && (
-          <Typography color="error" variant="body2" align="center" sx={{ mt: 2 }}>
-            {error}
-          </Typography>
+          <Box sx={{ textAlign: "center", mt: 2 }}>
+            <Typography color="error" variant="body2" component="span">
+              {error}
+            </Typography>
+            {errorLogEntry && (
+              <Button size="small" onClick={() => setShowErrorLog(true)} sx={{ ml: 1, textTransform: "none" }}>
+                Show Details
+              </Button>
+            )}
+          </Box>
         )}
 
         <Box sx={{ display: "flex", justifyContent: "center", mt: 3 }}>
@@ -348,6 +369,7 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
         onAbort={handleAbortConfirmed}
         onContinue={() => setAbortConfirmOpen(false)}
       />
+      <ErrorLogDialog open={showErrorLog} onClose={() => setShowErrorLog(false)} entry={errorLogEntry} />
     </Box>
   );
 }

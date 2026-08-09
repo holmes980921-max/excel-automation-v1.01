@@ -12,7 +12,7 @@
  */
 
 import type { TransformationRule } from "./rules";
-import { callWorker, type WorkerCall } from "./converter/workerClient";
+import { callWorker, WorkerError, type WorkerCall } from "./converter/workerClient";
 import type { ConvertResult, AddDescriptionResult, ConversionSummary, DebugInfo } from "./converter/engine";
 
 export type { ConversionSummary, DebugInfo };
@@ -26,7 +26,17 @@ export type ExportResponse = {
 
 export type AddDescriptionResponse = AddDescriptionResult;
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  /** V1.11: true for an expected validation failure (e.g. "Description
+   * file has duplicate PPID(s): ...") whose message may echo back the
+   * user's own data - callers should not offer a copyable diagnostic log
+   * for this class of error. See lib/converter/worker.ts. */
+  isValidationError: boolean;
+  constructor(message: string, isValidationError = false) {
+    super(message);
+    this.isValidationError = isValidationError;
+  }
+}
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -45,6 +55,7 @@ async function runOrWrap<T>(request: WorkerCall, signal?: AbortSignal): Promise<
     return await callWorker<T>(request, signal);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") throw err;
+    if (err instanceof WorkerError) throw new ApiError(err.message, err.isValidationError);
     throw new ApiError(err instanceof Error ? err.message : "Conversion failed");
   }
 }

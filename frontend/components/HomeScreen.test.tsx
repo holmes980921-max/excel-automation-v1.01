@@ -2,11 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import HomeScreen from "./HomeScreen";
-import { convertText, convertFile, type ConvertResponse } from "@/lib/api";
+import { convertText, convertFile, ApiError, type ConvertResponse } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   convertText: vi.fn(),
   convertFile: vi.fn(),
+  ApiError: class ApiError extends Error {
+    isValidationError: boolean;
+    constructor(message: string, isValidationError = false) {
+      super(message);
+      this.isValidationError = isValidationError;
+    }
+  },
 }));
 
 const RESPONSE: ConvertResponse = {
@@ -116,6 +123,39 @@ describe("HomeScreen", () => {
       expect(screen.queryByText("Clipboard Loaded")).not.toBeInTheDocument();
       expect(screen.getByPlaceholderText(/paste excel data/i)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /convert/i })).toBeDisabled();
+    });
+  });
+
+  describe("Error Details (V1.11)", () => {
+    it("offers Show Details for an unexpected failure, opening a log with no business data", async () => {
+      vi.mocked(convertText).mockRejectedValue(new ApiError("Unrecognized file format", false));
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+
+      fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), { target: { value: "bad data" } });
+      fireEvent.click(screen.getByRole("button", { name: /convert/i }));
+
+      await screen.findByText("Unrecognized file format");
+      fireEvent.click(screen.getByRole("button", { name: /show details/i }));
+
+      expect(await screen.findByText(/Operation: Conversion/)).toBeInTheDocument();
+      expect(screen.getByText(/Error Message: Unrecognized file format/)).toBeInTheDocument();
+      // Regression guard (spec section 15): the log must never contain
+      // converted-data fields, even though this test's own error text
+      // doesn't happen to include any.
+      expect(screen.getByText(/Operation: Conversion/).closest("pre")?.textContent).not.toMatch(/PPID|TS#\d/);
+    });
+
+    it("does not offer Show Details for a validation error, since its message may echo the user's own data", async () => {
+      vi.mocked(convertText).mockRejectedValue(
+        new ApiError("Description file has duplicate PPID(s): AB000010_1, AB000020_1", true)
+      );
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+
+      fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), { target: { value: "bad data" } });
+      fireEvent.click(screen.getByRole("button", { name: /convert/i }));
+
+      await screen.findByText(/duplicate PPID/);
+      expect(screen.queryByRole("button", { name: /show details/i })).not.toBeInTheDocument();
     });
   });
 

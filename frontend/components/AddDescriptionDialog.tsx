@@ -16,10 +16,12 @@ import {
 } from "@mui/material";
 import { FileSpreadsheet, UploadCloud, XCircle, ClipboardPaste, CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
-import { addDescription, addDescriptionFromClipboard, type AddDescriptionResponse } from "@/lib/api";
+import { addDescription, addDescriptionFromClipboard, ApiError, type AddDescriptionResponse } from "@/lib/api";
 import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
 import { summarizePastedText, type PasteSummary } from "@/lib/pasteSummary";
+import { buildErrorLogEntry, toError, type ErrorLogEntry } from "@/lib/errorLog";
 import ProcessingOverlay from "@/components/ProcessingOverlay";
+import ErrorLogDialog from "@/components/ErrorLogDialog";
 
 const PASTE_TEXTAREA_MAX_ROWS = 6;
 
@@ -48,6 +50,10 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
   const [pasteSummary, setPasteSummary] = useState<PasteSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // V1.11: same "Show Details" affordance as HomeScreen - reuses the
+  // existing ErrorLogDialog/errorLog.ts infrastructure.
+  const [errorLogEntry, setErrorLogEntry] = useState<ErrorLogEntry | null>(null);
+  const [showErrorLog, setShowErrorLog] = useState(false);
   const rawPasteTextRef = useRef("");
   const rawPasteHtmlRef = useRef<string | undefined>(undefined);
 
@@ -106,6 +112,7 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
     if (loading || (!file && !hasPaste)) return;
     setLoading(true);
     setError(null);
+    setErrorLogEntry(null);
     try {
       const data = file
         ? await addDescription(file, baseRows)
@@ -116,6 +123,12 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unexpected error while adding description.";
       setError(message);
+      // V1.11: not offered for a known validation failure (e.g. a
+      // duplicate-PPID list), which may echo back the user's own data -
+      // see lib/api.ts's ApiError.
+      if (!(err instanceof ApiError && err.isValidationError)) {
+        setErrorLogEntry(buildErrorLogEntry({ error: toError(err, message), operation: "Add Description" }));
+      }
       toast.error(message);
     } finally {
       setLoading(false);
@@ -284,9 +297,16 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
         </Box>
 
         {error && (
-          <Typography color="error" variant="body2" sx={{ mt: 2 }}>
-            {error}
-          </Typography>
+          <Box sx={{ mt: 2 }}>
+            <Typography color="error" variant="body2" component="span">
+              {error}
+            </Typography>
+            {errorLogEntry && (
+              <Button size="small" onClick={() => setShowErrorLog(true)} sx={{ ml: 1, textTransform: "none" }}>
+                Show Details
+              </Button>
+            )}
+          </Box>
         )}
       </DialogContent>
       <DialogActions>
@@ -297,6 +317,7 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
           Add Description
         </Button>
       </DialogActions>
+      <ErrorLogDialog open={showErrorLog} onClose={() => setShowErrorLog(false)} entry={errorLogEntry} />
     </Dialog>
   );
 }

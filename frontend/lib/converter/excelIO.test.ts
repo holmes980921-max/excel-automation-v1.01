@@ -50,6 +50,16 @@ describe("detectExcelFormat", () => {
       InvalidExcelFormatError
     );
   });
+
+  it("sets .name explicitly so worker.ts can identify it across the postMessage boundary (V1.11)", () => {
+    try {
+      detectExcelFormat(new TextEncoder().encode("not an excel file at all"));
+      expect.unreachable("expected detectExcelFormat to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).name).toBe("InvalidExcelFormatError");
+    }
+  });
 });
 
 describe("looksLikeHtml", () => {

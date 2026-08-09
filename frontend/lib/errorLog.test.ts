@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildErrorLogEntry, formatErrorLog } from "./errorLog";
+import { buildErrorLogEntry, formatErrorLog, toError } from "./errorLog";
 
 describe("buildErrorLogEntry", () => {
   it("captures the error message and stack", () => {
@@ -28,6 +28,19 @@ describe("buildErrorLogEntry", () => {
   it("falls back to a placeholder for an error with no message", () => {
     const entry = buildErrorLogEntry({ error: new Error(), operation: "UI Rendering" });
     expect(entry.message).toBe("(no message)");
+  });
+});
+
+describe("toError", () => {
+  it("passes a real Error through unchanged", () => {
+    const original = new Error("boom");
+    expect(toError(original, "fallback")).toBe(original);
+  });
+
+  it("wraps a non-Error thrown value in a real Error using the fallback message", () => {
+    const wrapped = toError("a string was thrown", "fallback message");
+    expect(wrapped).toBeInstanceOf(Error);
+    expect(wrapped.message).toBe("fallback message");
   });
 });
 

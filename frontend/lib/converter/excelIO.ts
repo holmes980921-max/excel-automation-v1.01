@@ -16,7 +16,17 @@
 
 import * as XLSX from "xlsx";
 
-export class InvalidExcelFormatError extends Error {}
+export class InvalidExcelFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    // Explicit, not just the inherited "Error" - lets worker.ts (V1.11)
+    // reliably tell a validation failure apart from an unexpected one
+    // across the postMessage boundary (where class identity is lost but a
+    // plain string property survives), without relying on `instanceof`
+    // across that boundary or on minifier-fragile class-name introspection.
+    this.name = "InvalidExcelFormatError";
+  }
+}
 
 const ZIP_SIGNATURE = [0x50, 0x4b, 0x03, 0x04]; // .xlsx/.xlsm (OOXML is a zip archive)
 const OLE2_SIGNATURE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]; // legacy .xls

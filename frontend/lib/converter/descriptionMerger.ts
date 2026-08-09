@@ -14,7 +14,14 @@ import { insertFieldAfter } from "./dfHelpers";
 // description data can be large, and nobody reads a list of 5,000 PPIDs.
 const MAX_LISTED_PPIDS = 50;
 
-export class InvalidExcelFormatError extends Error {}
+export class InvalidExcelFormatError extends Error {
+  constructor(message: string) {
+    super(message);
+    // See excelIO.ts's InvalidExcelFormatError for why this is set
+    // explicitly (V1.11 privacy gating for the Error Log Viewer).
+    this.name = "InvalidExcelFormatError";
+  }
+}
 
 export type DescriptionRow = { PPID: unknown; DESC: unknown };
 

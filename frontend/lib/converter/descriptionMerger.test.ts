@@ -67,4 +67,17 @@ describe("mergeDescription", () => {
   it("requires a PPID column in the base rows", () => {
     expect(() => mergeDescription([{ "TS#": "TS#1" }], [{ PPID: "AB000010_1", DESC: "A" }])).toThrow(/PPID/);
   });
+
+  it("sets .name explicitly so worker.ts can identify it across the postMessage boundary (V1.11)", () => {
+    try {
+      mergeDescription(rowsData(), [
+        { PPID: "AB000010_1", DESC: "A" },
+        { PPID: "AB000010_1", DESC: "B" },
+      ]);
+      expect.unreachable("expected mergeDescription to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).name).toBe("InvalidExcelFormatError");
+    }
+  });
 });

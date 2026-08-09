@@ -19,6 +19,14 @@ export type ErrorLogEntry = {
   environment: string;
 };
 
+/** Normalizes a caught `unknown` (from a try/catch) into a real Error, so
+ * every call site that wants to offer "Show Details" (V1.11) can build a
+ * log entry the same way ErrorBoundary already does, regardless of whether
+ * what was thrown was actually an Error instance. */
+export function toError(err: unknown, fallbackMessage: string): Error {
+  return err instanceof Error ? err : new Error(fallbackMessage);
+}
+
 function getEnvironmentInfo(): string {
   if (typeof navigator === "undefined" || typeof window === "undefined") return "unknown";
   return `${navigator.userAgent} | viewport ${window.innerWidth}x${window.innerHeight}`;

@@ -35,7 +35,7 @@ export type WorkerRequest =
 
 export type WorkerResponse =
   | { id: number; ok: true; result: unknown; transferBuffer?: ArrayBuffer }
-  | { id: number; ok: false; error: string };
+  | { id: number; ok: false; error: string; isValidationError: boolean };
 
 const ctx = self as unknown as Worker;
 
@@ -72,6 +72,15 @@ ctx.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    ctx.postMessage({ id: msg.id, ok: false, error: message } satisfies WorkerResponse);
+    // V1.11: a validation error's message (e.g. a duplicate-PPID list) can
+    // legitimately echo back the user's own data - appropriate for the
+    // inline on-screen message, but not for a copyable diagnostic log.
+    // `isValidationError` lets the UI layer skip offering "Show Details"
+    // for exactly that class of error. Checked via `.name` (set explicitly
+    // in InvalidExcelFormatError's constructor) rather than `instanceof`,
+    // since class identity doesn't survive the structured-clone boundary
+    // this postMessage crosses.
+    const isValidationError = err instanceof Error && err.name === "InvalidExcelFormatError";
+    ctx.postMessage({ id: msg.id, ok: false, error: message, isValidationError } satisfies WorkerResponse);
   }
 };

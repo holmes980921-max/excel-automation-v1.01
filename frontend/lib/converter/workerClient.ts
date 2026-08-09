@@ -16,6 +16,19 @@
 
 import type { WorkerRequest, WorkerResponse } from "./worker";
 
+/** Carries `isValidationError` across the worker boundary (V1.11) - lets
+ * callers skip offering "Show Details"/Copy Log for a validation message
+ * that may echo back the user's own data (e.g. a duplicate-PPID list),
+ * without needing to parse message text to guess. */
+export class WorkerError extends Error {
+  isValidationError: boolean;
+  constructor(message: string, isValidationError: boolean) {
+    super(message);
+    this.name = "WorkerError";
+    this.isValidationError = isValidationError;
+  }
+}
+
 // Plain `Omit` doesn't distribute over a union - it collapses WorkerRequest
 // to the intersection of its members' keys first, which drops every
 // variant-specific field (fileBytes, text, rows, ...). This distributes
@@ -38,7 +51,7 @@ function getWorker(): Worker {
       if (!entry) return;
       pending.delete(msg.id);
       if (msg.ok) entry.resolve(msg.result);
-      else entry.reject(new Error(msg.error));
+      else entry.reject(new WorkerError(msg.error, msg.isValidationError));
     };
     worker.onerror = (event) => {
       // An uncaught error in the worker (rare - engine.ts catches its own

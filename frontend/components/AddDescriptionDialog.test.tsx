@@ -1,11 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import AddDescriptionDialog from "./AddDescriptionDialog";
-import { addDescription, addDescriptionFromClipboard, type AddDescriptionResponse } from "@/lib/api";
+import { addDescription, addDescriptionFromClipboard, ApiError, type AddDescriptionResponse } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   addDescription: vi.fn(),
   addDescriptionFromClipboard: vi.fn(),
+  ApiError: class ApiError extends Error {
+    isValidationError: boolean;
+    constructor(message: string, isValidationError = false) {
+      super(message);
+      this.isValidationError = isValidationError;
+    }
+  },
 }));
 
 function pasteInto(element: Element, text: string, html?: string) {
@@ -140,6 +147,40 @@ describe("AddDescriptionDialog", () => {
       pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nX1\tnote");
       expect(screen.queryByText("descriptions.xlsx")).not.toBeInTheDocument();
       expect(screen.getByText("Clipboard Loaded")).toBeInTheDocument();
+    });
+  });
+
+  describe("Error Details (V1.11)", () => {
+    it("offers Show Details for an unexpected merge failure", async () => {
+      vi.mocked(addDescriptionFromClipboard).mockRejectedValue(
+        new ApiError("Description file is missing required column(s): DESC", false)
+      );
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[{ PPID: "X1" }]} onMerged={vi.fn()} />);
+
+      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\nX1");
+      fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
+
+      await screen.findByText(/missing required column/);
+      fireEvent.click(screen.getByRole("button", { name: /show details/i }));
+
+      expect(await screen.findByText(/Operation: Add Description/)).toBeInTheDocument();
+    });
+
+    it("does not offer Show Details for a duplicate-PPID validation error", async () => {
+      vi.mocked(addDescriptionFromClipboard).mockRejectedValue(
+        new ApiError("Description file has duplicate PPID(s): AB000010_1, AB000020_1", true)
+      );
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[{ PPID: "AB000010_1" }]} onMerged={vi.fn()} />);
+
+      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nAB000010_1\ta\nAB000010_1\tb");
+      fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
+
+      // The duplicate-PPID list is expected inline (existing V1.06 UX,
+      // already visible to the user) - only the copyable diagnostic log
+      // is withheld, since it would otherwise duplicate that same PPID
+      // list into a form meant to be pasted into a bug report elsewhere.
+      await screen.findByText(/duplicate PPID/);
+      expect(screen.queryByRole("button", { name: /show details/i })).not.toBeInTheDocument();
     });
   });
 });
