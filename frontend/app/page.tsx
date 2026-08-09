@@ -11,6 +11,7 @@ import RuleEditor from "@/components/RuleEditor";
 import ExcelGrid from "@/components/ExcelGrid";
 import AboutDialog from "@/components/AboutDialog";
 import ReleaseNotesDialog from "@/components/ReleaseNotesDialog";
+import HelpSupportDialog from "@/components/HelpSupportDialog";
 import HomeScreen from "@/components/HomeScreen";
 import ReturnHomeDialog from "@/components/ReturnHomeDialog";
 import AddDescriptionDialog from "@/components/AddDescriptionDialog";
@@ -54,6 +55,7 @@ export default function Home() {
   const [addDescriptionOpen, setAddDescriptionOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [homeConfirmOpen, setHomeConfirmOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(true);
   // Hidden by default (V1.05: "simplify the interface for everyday users
@@ -315,6 +317,7 @@ export default function Home() {
         onToggleDebugMode={handleToggleDebugMode}
         onOpenAbout={() => setAboutOpen(true)}
         onOpenReleaseNotes={() => setReleaseNotesOpen(true)}
+        onOpenHelp={() => setHelpOpen(true)}
         previewLimit={previewLimit}
         onPreviewLimitChange={handlePreviewLimitRequest}
         onAddDescriptionClick={() => setAddDescriptionOpen(true)}
@@ -388,6 +391,7 @@ export default function Home() {
       />
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ReleaseNotesDialog open={releaseNotesOpen} onClose={() => setReleaseNotesOpen(false)} />
+      <HelpSupportDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
     </Box>
   );
 }
