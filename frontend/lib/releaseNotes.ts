@@ -20,6 +20,24 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "V1.10",
+    date: "2026-08-09",
+    title: "Browser Edition",
+    new: [
+      "Runs entirely in your browser via GitHub Pages - no backend server, nothing uploaded anywhere",
+      "Add Description now supports Clipboard Paste (previously Upload/Drag & Drop only)",
+    ],
+    improved: [
+      "Abort now genuinely cancels an in-progress conversion (previously the backend's computation ran to completion regardless)",
+    ],
+    fixed: [],
+    knownIssues: [
+      "A temporary release for user validation ahead of V2.0's Python/FastAPI Server Edition - the V1.09 backend remains the production codebase (see release/v1.09)",
+      "Large files (~100,000+ rows) run somewhat slower than the V1.09 backend's calamine reader, since parsing happens in the browser - not yet optimized, per this version's own \"measure before optimizing\" principle",
+      "Debug Mode's peak-memory figure always reads 0 - no standard cross-browser equivalent of the backend's psutil-based memory sampling exists",
+    ],
+  },
+  {
     version: "V1.09",
     date: "2026-08-07",
     title: "Support & Usability",

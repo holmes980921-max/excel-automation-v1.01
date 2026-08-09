@@ -18,7 +18,8 @@ describe("ReleaseNotesDialog", () => {
     }
     // The most recent entry's content is visible without expanding anything.
     const latest = RELEASE_NOTES[0];
-    expect(screen.getByText(latest.fixed[0])).toBeInTheDocument();
+    const firstItem = latest.new[0] ?? latest.improved[0] ?? latest.fixed[0] ?? latest.knownIssues[0];
+    expect(screen.getByText(firstItem)).toBeInTheDocument();
   });
 
   it("calls onClose when Close is clicked", () => {

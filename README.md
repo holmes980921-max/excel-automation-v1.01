@@ -1,31 +1,67 @@
-# RCC Excel Automation
+# RCC Excel Automation - Browser Edition
 
-A local, configurable Excel transformation tool. It converts a PPID / Parameter / Reference
-Value excel export into a flat table - one row per `TS#` block - and lets you customize which
-columns appear, in what order, and under what display name, entirely through the UI (no code
-changes required).
+A configurable Excel transformation tool. It converts a PPID / Parameter / Reference Value excel
+export into a flat table - one row per `TS#` block - and lets you customize which columns appear,
+in what order, and under what display name, entirely through the UI (no code changes required).
 
 > Renamed from "Excel Automation" to "RCC Excel Automation" in V1.09 (branding only - no behavior
 > change). Older per-version reports (`CODE_REVIEW_V1.0X.md`, etc.) keep their original title as a
 > historical record and are not retroactively renamed.
 
-**Current version: V1.09** (see the in-app **About** dialog, under the Settings menu, for the
-live version/build info - the header intentionally no longer hardcodes a version string)
+## V1.10: Browser Edition (this branch)
 
-## Quick Start (Windows)
+**This `browser-edition` branch is a temporary, JavaScript/TypeScript-only build of the app that
+runs entirely client-side and deploys as a static site to GitHub Pages** - no Python, no FastAPI,
+no server of any kind. It exists to get real users on the app (and real usage feedback) while the
+team's internal server access is still ~1 month out, ahead of a planned V2.0 Server Edition.
+
+- **The Python/FastAPI implementation is preserved, untouched, on [`release/v1.09`](../../tree/release/v1.09).**
+  This branch does not replace it - V2.0 will build on the FastAPI backend, not this branch.
+- Every excel read/parse/transform/export step that used to be an HTTP call to FastAPI now runs
+  locally in the browser (via a Web Worker - see [Architecture](#architecture) below). Nothing you
+  upload or paste is ever sent anywhere.
+- See [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for the full migration writeup, behavioral-
+  parity regression results against the V1.09 Python engine, and known limitations.
+
+**Current version: V1.10 - Browser Edition** (see the in-app **About** dialog for live version/
+build info)
+
+## Quick Start
+
+**Hosted (recommended)**: open the deployed GitHub Pages URL - nothing to install. See
+[Deployment](#deployment-github-pages) for the actual URL once published.
+
+**Local (Windows), Browser Edition only:**
 
 ```
-1. Double-click run.bat
-2. Wait for "RCC Excel Automation is running"
-3. Open http://localhost:3000
+cd frontend
+npm install
+npm run dev
+# open http://localhost:3000
 ```
 
-`run.bat`/`run.ps1` checks your Python/Node versions, creates the backend virtual environment
-and installs dependencies if missing, and starts both servers (each in its own window) - no
-manual setup required. See [Developer Experience](#developer-experience) below for details, and
-[Troubleshooting](#troubleshooting) if something doesn't come up.
+No backend/Python setup is needed to run the Browser Edition locally - `run.bat`/`run.ps1` (below)
+still exist for running the **V1.09 Python/FastAPI** implementation from this same checkout, in
+case you need to compare behavior against it (V1.10's regression suite already does this
+automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 
 ## Features
+
+### Browser Edition (V1.10)
+- **Runs entirely in the browser, deployed as a static site to GitHub Pages.** No backend, no
+  database, nothing uploaded to any server - conversion, rule shaping, Add Description, and
+  `.xlsx` export all happen locally, in a Web Worker (see [Architecture](#architecture)).
+- **Add Description now supports Clipboard Paste** (previously Upload/Drag & Drop only - a known
+  V1.09 gap). All three input methods (Upload, Drag & Drop, Paste) funnel through the same
+  normalization + merge pipeline, so results are identical regardless of how the data got in.
+- **Abort now genuinely cancels an in-progress conversion.** V1.09's Abort only cancelled the
+  browser's `fetch` - the backend's already-started computation ran to completion regardless, its
+  result simply discarded. V1.10 runs conversion in a Web Worker; Abort calls `worker.terminate()`,
+  which actually stops the computation - not a regression, an improvement made possible by the
+  new architecture.
+- See [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for the full assessment, including known
+  limitations (large-file performance vs. the V1.09 calamine reader, Debug Mode's peak-memory
+  figure).
 
 ### Support & Usability (V1.09)
 - **Renamed to RCC Excel Automation** - applied to the browser title, header, Home screen,
@@ -191,16 +227,22 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Backend (pytest, 67 tests)
-cd backend
-./.venv/Scripts/pip install -r requirements-dev.txt
-./.venv/Scripts/python.exe -m pytest                              # or: pytest --cov=app --cov-report=term-missing
-
-# Frontend (Vitest, 82 tests)
+# Frontend (Vitest, 150 tests) - the only test suite that matters for this branch
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
-npm run lint                                                        # ESLint (added in V1.08)
+npm run lint
+npx tsc --noEmit
 ```
+
+Included in those 150: a dedicated `lib/converter/regression.test.ts` that loads real fixture
+files and compares the JS engine's output field-for-field against a JSON snapshot produced by the
+actual Python V1.09 engine - see [Architecture](#architecture) and
+[CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for how this is generated/verified.
+
+The Python/`pytest` suite (67 tests) still exists and still passes unchanged - it belongs to the
+preserved V1.09 backend (`backend/`), not to this branch's running app. See
+`backend/scripts/dump_transform_json.py` if you need to regenerate the regression snapshots after
+changing `backend/app/services/excel_transformer.py` on `release/v1.09`.
 
 ### Debug Mode
 
@@ -269,6 +311,49 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
    conversion (never stacks onto a previous merge) - so switching description files is safe.
 6. `DESC` rides along on **Quick Save**/**Save As** regardless of which Transformation Rule is
    active, since it isn't part of the rule-shapeable column set.
+
+## Architecture
+
+```
+User -> Browser -> JavaScript/TypeScript (frontend/lib/converter/)
+                      - Excel Read (SheetJS, + a native DOMParser path for
+                        the "HTML table saved as .xls" case)
+                      - Transform / Rule shaping / Add Description merge
+                      - Excel Export (SheetJS)
+                    -> runs inside a Web Worker (worker.ts) -> Download
+```
+
+Every V1.09 endpoint has a direct client-side equivalent in `frontend/lib/converter/`:
+
+| V1.09 (FastAPI) | V1.10 (Browser Edition) |
+|---|---|
+| `services/excel_transformer.py` | `lib/converter/transformer.ts` |
+| `services/rule_manager.py` | `lib/converter/ruleManager.ts` |
+| `services/description_merger.py` | `lib/converter/descriptionMerger.ts` |
+| `utils/excel_io.py` | `lib/converter/excelIO.ts` (SheetJS instead of calamine/openpyxl/xlrd) |
+| `POST /api/convert`, `/convert-text`, `/export`, `/add-description` | `lib/converter/engine.ts`, called via `lib/converter/worker.ts` |
+
+`lib/api.ts` keeps the exact same function signatures it had in V1.09 (`convertFile`,
+`convertText`, `exportRows`, `addDescription`, plus the new `addDescriptionFromClipboard`) - every
+component that called it (HomeScreen, AddDescriptionDialog, page.tsx, ...) needed no changes
+beyond what V1.10 explicitly adds. The Worker exists for two reasons: it lets Abort actually
+terminate an in-progress computation (impossible on a synchronous main thread), and it keeps the
+UI responsive while parsing large files - not for raw throughput (see
+[Performance philosophy](#deployment-github-pages) below).
+
+## Deployment (GitHub Pages)
+
+Pushing to `browser-edition` (paths under `frontend/**`) triggers
+[`.github/workflows/deploy-pages.yml`](./.github/workflows/deploy-pages.yml): type-check, lint,
+test, `next build` (static export via `output: "export"` in `next.config.mjs`), then publish
+`frontend/out/` to GitHub Pages. `next dev` is unaffected by `output: "export"`, so local
+development works exactly as before.
+
+**Performance philosophy (per this version's own spec): don't optimize prematurely.** SheetJS
+parsing in the browser is not as fast as the V1.09 backend's `python-calamine` reader at very
+large scale, and this is a known, disclosed trade-off - not yet measured against real usage, and
+not addressed speculatively. Once this branch is deployed and used with real datasets (1k/10k/
+50k/100k rows), any actual bottleneck found is the one worth fixing.
 
 ## Reporting a Problem
 
@@ -418,6 +503,15 @@ freeze the browser. The summary ("Clipboard Loaded / Rows / Columns / Status: Re
 confirms the paste was captured correctly; click **Clear** to paste something else, or **Convert**
 to proceed with the full pasted data (it's kept in memory, just not rendered).
 
+**A large file takes a while to convert, or Abort doesn't stop it instantly (V1.10).**
+Conversion runs in a Web Worker, so the tab itself never freezes regardless of file size - but a
+very large file (~100,000+ rows) genuinely takes longer to parse in the browser than the V1.09
+backend's `python-calamine` reader did server-side. This is a known, disclosed trade-off (see
+[CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)), not yet optimized per this version's "measure
+before optimizing" principle. Abort does stop the computation as soon as the worker receives the
+termination signal - there can be a brief delay if it's mid-way through a single large parsing
+call.
+
 **Save As doesn't open a native folder picker.**
 The OS-native Save dialog uses the browser's File System Access API, which only Chromium-based
 browsers (Chrome, Edge) implement. On Firefox/Safari, Save As falls back to the same behavior as
@@ -429,9 +523,10 @@ same reason: no browser exposes an API for a web page to open the OS file explor
 
 ```
 excel-automation-v1.01/
-├── run.ps1 / run.bat         # One-click start (env check + install + launch + health check)
+├── .github/workflows/deploy-pages.yml  # V1.10: type-check/lint/test -> static export -> GitHub Pages
+├── run.ps1 / run.bat         # One-click start for the V1.09 Python/FastAPI backend (unaffected by V1.10)
 ├── update.ps1 / update.bat   # One-click update (git pull + reinstall)
-├── scripts/health-check.ps1  # Standalone health check
+├── scripts/health-check.ps1  # Standalone health check (V1.09 backend)
 ├── examples/rules/           # Example rule JSON files
 ├── PERFORMANCE_BENCHMARK_V1.05.md  # V1.04 vs V1.05 methodology + results
 ├── TEST_COVERAGE_V1.05.md          # Backend/frontend coverage breakdown
@@ -443,7 +538,10 @@ excel-automation-v1.01/
 ├── DEPENDENCY_AUDIT_V1.08.md       # Missing/unused dependency findings incl. the psutil clean-install bug
 ├── TEST_COVERAGE_V1.08.md          # Backend/frontend coverage breakdown
 ├── CODE_REVIEW_V1.09.md            # V1.09 review + score (Home reset fix, Remove/Clear, Error Log, Release Notes)
-├── backend/
+├── CODE_REVIEW_V1.10.md            # V1.10 review + score (Browser Edition migration, JS/Python parity regression)
+├── backend/                        # Preserved V1.09 Python/FastAPI implementation - not used by this branch's
+│                                    # running app; kept only as the source of truth for the regression fixtures
+│                                    # in frontend/lib/converter/__fixtures__/ (see Architecture above)
 │   ├── app/
 │   │   ├── main.py                    # FastAPI app entry, CORS, logging setup, global exception handler
 │   │   ├── api/
@@ -490,7 +588,19 @@ excel-automation-v1.01/
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
     │   └── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices)
     ├── lib/
-    │   ├── api.ts                     # Centralized backend API client (single source for fetch calls)
+    │   ├── api.ts                     # V1.10: local-engine client (was a FastAPI fetch client through V1.09) - same public interface
+    │   ├── converter/                 # V1.10: the local conversion engine - see Architecture above
+    │   │   ├── constants.ts           # Port of backend/app/models/constants.py
+    │   │   ├── transformer.ts         # Port of backend/app/services/excel_transformer.py
+    │   │   ├── ruleManager.ts         # Port of backend/app/services/rule_manager.py
+    │   │   ├── descriptionMerger.ts   # Port of backend/app/services/description_merger.py
+    │   │   ├── dfHelpers.ts           # Port of backend/app/utils/df_helpers.py
+    │   │   ├── excelIO.ts             # Port of backend/app/utils/excel_io.py (SheetJS + DOMParser instead of pandas)
+    │   │   ├── engine.ts              # Orchestrates the above into convertFile/convertText/exportRows/addDescription*
+    │   │   ├── worker.ts              # Web Worker entry point - runs engine.ts off the main thread (real Abort)
+    │   │   ├── workerClient.ts        # Main-thread RPC client for worker.ts, used by lib/api.ts
+    │   │   ├── regression.test.ts     # V1.09 (Python) vs V1.10 (JS) field-for-field parity, real fixture files
+    │   │   └── __fixtures__/          # Real .xls/.xlsx files + Python-generated *.expected.json snapshots
     │   ├── naturalCompare.ts          # Shared natural-sort comparator (used by AG Grid column sort)
     │   ├── rules.ts                   # TransformationRule type, localStorage persistence, shaping helpers
     │   ├── uploadValidation.ts        # Pure file-rejection-message logic (extracted for testability)
@@ -499,10 +609,11 @@ excel-automation-v1.01/
     │   ├── pasteSummary.ts            # V1.08: lightweight row/column summary for a large paste, never renders the raw text
     │   ├── errorLog.ts                # V1.09: builds/formats the Error Log Viewer's plain-text log entry
     │   ├── releaseNotes.ts            # V1.09: Release Notes content - add one entry here per future version
-    │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE for the About dialog
+    │   └── version.ts                 # FRONTEND_VERSION/GIT_TAG/BUILD_DATE/EDITION for the About dialog
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
     ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 82 tests
+    ├── next.config.mjs                # V1.10: output: "export" + basePath for GitHub Pages
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 150 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -556,6 +667,12 @@ concerns independent and separately testable.
   Log Viewer (Show Log / Copy Log / developer contact) for unexpected errors; added an in-app
   Release Notes page. See [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md) and
   [CHANGELOG.md](./CHANGELOG.md).
+- **V1.10 (this branch)** - Browser Edition: the entire conversion pipeline ported to
+  JavaScript/TypeScript and moved into a Web Worker, running fully client-side with no backend;
+  deployed as a static site to GitHub Pages via GitHub Actions; Add Description gained Clipboard
+  Paste support (closing a real V1.09 gap); Abort now genuinely cancels an in-progress conversion.
+  The V1.09 Python/FastAPI implementation is preserved unchanged on `release/v1.09`. See
+  [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -606,3 +723,14 @@ change this version is a 2-line branding string in `main.py`. No conversion outp
 Home-reset fix and Remove/Clear additions are frontend-only session-state changes, verified by a
 new `frontend/app/page.test.tsx` regression test that specifically reproduces the fixed bug
 (customize a rule, reset via Home, reconvert, assert the rule is back to Default).
+
+**V1.10 (Browser Edition)**: this branch doesn't modify the V1.09 backend at all - it's a
+different implementation of the same behavior, not a change to the original. "Backward
+compatibility" here means the new JS/TS engine produces the same output as the Python engine it
+replaces, verified directly (not assumed): `frontend/lib/converter/regression.test.ts` runs three
+real fixture files (`.xlsx`, `.xls`, and a genuine Excel-COM-saved `.xls` - the same files
+`backend/tests/` has used since V1.04.1) through the JS engine and asserts every row, every
+column, and every field value matches a JSON snapshot generated directly from the Python
+`ExcelTransformer` (`backend/scripts/dump_transform_json.py`), field-for-field, not just spot
+checks. `lib/rules.ts`, `lib/filename.ts`, and every UI component not explicitly listed as changed
+in the V1.10 feature list above are byte-identical to `release/v1.09` - reused, not rewritten.

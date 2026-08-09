@@ -3,6 +3,72 @@
 > Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
 > below for earlier versions use the name in effect at the time.
 
+## v1.10 - Browser Edition
+
+### Release Notes
+
+V1.10 is a temporary Browser Edition: the entire conversion pipeline (excel read, transform, rule
+shaping, Add Description merge, `.xlsx` export) ported from Python/FastAPI to JavaScript/
+TypeScript, running fully client-side and deployed as a static site to GitHub Pages via GitHub
+Actions - no backend, no database, nothing uploaded anywhere. It exists to get real users on the
+app and collect real usage feedback while the team's internal server access is still ~1 month out,
+ahead of a planned V2.0 Server Edition built on the preserved V1.09 Python/FastAPI backend
+(`release/v1.09`, untouched by this branch). Along the way it also closes a real V1.09 gap (Add
+Description had no Clipboard Paste support) and turns Abort from a "discard the response" fake
+cancellation into a genuine one, made possible by moving conversion into a Web Worker. Full detail,
+including the field-for-field regression results against the Python engine and known limitations:
+[CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md).
+
+### Added
+- `frontend/lib/converter/` - a direct TypeScript port of every backend service/util needed for
+  conversion (`transformer.ts`, `ruleManager.ts`, `descriptionMerger.ts`, `dfHelpers.ts`,
+  `excelIO.ts`), orchestrated by `engine.ts` and run inside a Web Worker (`worker.ts`, via
+  `workerClient.ts`) so the UI thread never blocks and Abort can genuinely terminate an in-flight
+  conversion (`worker.terminate()`) instead of just discarding a response.
+- SheetJS (`xlsx`) reads/writes `.xls`/`.xlsx`/`.xlsm` in the browser; the HTML-table-saved-as-
+  `.xls` case (a real V1.04.1 fix) is re-implemented via the browser's native `DOMParser`.
+- **Add Description Clipboard Paste** (`AddDescriptionDialog.tsx`) - previously Upload/Drag & Drop
+  only. Prefers the clipboard's `text/html` payload (Excel always includes one, and it survives a
+  literal tab/newline inside a DESC cell), falling back to `text/plain` TSV - both converge on the
+  same `resolveDescriptionRows`/`mergeDescription` pipeline as Upload/Drag & Drop, so all three
+  input methods produce identical results for the same data.
+- `frontend/lib/converter/regression.test.ts` - loads three real fixture files (`.xlsx`, `.xls`,
+  and a genuine Excel-COM-saved `.xls`) and asserts the JS engine's output matches a JSON snapshot
+  generated directly from the Python `ExcelTransformer` (`backend/scripts/dump_transform_json.py`),
+  row-for-row and field-for-field, not just spot-checked.
+- `.github/workflows/deploy-pages.yml` - type-check/lint/test, static export (`next build` with
+  `output: "export"`), then publish to GitHub Pages on every push to `browser-edition`.
+
+### Changed
+- `frontend/lib/api.ts` rewritten to call the local Worker-based engine instead of `fetch`-ing a
+  FastAPI backend - kept the exact same exported function signatures/response shapes (plus the new
+  `addDescriptionFromClipboard`), so every existing caller (`HomeScreen.tsx`, `page.tsx`,
+  `AboutDialog.tsx`) needed no changes beyond what this version explicitly adds.
+- `AboutDialog.tsx` no longer shows a "Backend: FastAPI" row (there is no backend) - shows the new
+  `EDITION` constant and a "Runs entirely in your browser" note instead.
+- `next.config.mjs`: `output: "export"` + a conditional `basePath`/`assetPrefix` for GitHub Pages
+  (`next dev` is unaffected).
+
+### Fixed
+- A latent bug caught while writing this version's own export path: SheetJS's
+  `XLSX.write(..., { type: "array" })` returns a plain `number[]`, not a `Uint8Array`/
+  `ArrayBuffer` - passed directly to `new Blob([...])` this silently isn't a valid Blob part.
+  Wrapped in `new Uint8Array(...)` in `excelIO.ts`'s `rowsToXlsxBlob`, caught by its own new test
+  before ever reaching a real export.
+
+### Known limitations (disclosed, not fixed this version)
+- This is a temporary release for user validation ahead of V2.0 - the V1.09 backend
+  (`release/v1.09`) remains the production codebase; this branch does not modify it.
+- Large files (~100,000+ rows) parse somewhat slower in the browser (SheetJS) than the V1.09
+  backend's `python-calamine` reader did server-side - a disclosed trade-off, not optimized
+  speculatively, per this version's own "measure before optimizing" principle.
+- Debug Mode's peak-memory figure always reads 0 in this version - no standard, cross-browser
+  equivalent of the backend's `psutil`-based memory sampling exists in a browser.
+- Interactive browser testing (drag & drop, paste, Worker execution, file download) was verified
+  via direct unit/regression tests and a dev-server boot check, not a live interactive browser
+  session - no browser automation tool is available in this environment, same disclosed limitation
+  as every prior version's code review.
+
 ## v1.09 - Support & Usability
 
 ### Release Notes
