@@ -1,89 +1,64 @@
 /**
- * Centralized backend API client.
+ * Local conversion API (V1.10 Browser Edition).
  *
- * Every fetch call, the base URL, and response-shape types live here so
- * components never duplicate this plumbing (previously `API_BASE` and the
- * convert/export fetch logic were copy-pasted across UploadDialog and
- * page.tsx).
+ * Same public interface as V1.09's backend-calling `lib/api.ts` (function
+ * names, parameter shapes, response types) so every component that used to
+ * import from here (HomeScreen, AddDescriptionDialog, page.tsx,
+ * AboutDialog...) needed no changes beyond what V1.10 explicitly adds
+ * (Add Description clipboard paste). Every call that used to be an HTTP
+ * request to FastAPI now runs in `converter/worker.ts` via
+ * `converter/workerClient.ts` - there is no backend, no network request,
+ * and no server to be unavailable.
  */
 
 import type { TransformationRule } from "./rules";
+import { callWorker, type WorkerCall } from "./converter/workerClient";
+import type { ConvertResult, AddDescriptionResult, ConversionSummary, DebugInfo } from "./converter/engine";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
+export type { ConversionSummary, DebugInfo };
 
-export type ConversionSummary = {
-  ppid_count: number;
-  ts_count: number;
-  generated_rows: number;
-  conversion_time_seconds: number;
-};
-
-export type DebugInfo = {
-  stages_seconds: Record<string, number>;
-  total_seconds: number;
-  peak_memory_mb: number;
-  engine_used: string;
-};
-
-export type ConvertResponse = {
-  filename: string;
-  columns: string[];
-  rows: Record<string, unknown>[];
-  total_rows: number;
-  summary: ConversionSummary;
-  debug: DebugInfo | null;
-};
+export type ConvertResponse = ConvertResult;
 
 export type ExportResponse = {
   filename: string;
   file_base64: string;
 };
 
-export type AddDescriptionResponse = {
-  columns: string[];
-  rows: Record<string, unknown>[];
-  total_rows: number;
-  matched_count: number;
-  unmatched_count: number;
-  unmatched_ppids: string[];
-};
+export type AddDescriptionResponse = AddDescriptionResult;
 
 export class ApiError extends Error {}
 
-async function parseErrorDetail(res: Response, fallback: string): Promise<string> {
-  const body = await res.json().catch(() => null);
-  return (body && typeof body.detail === "string" && body.detail) || fallback;
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  // Chunked to avoid blowing the call stack on String.fromCharCode(...bytes)
+  // for large exports.
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
 }
 
-export async function convertFile(
-  file: File,
-  debug = false,
-  signal?: AbortSignal
-): Promise<ConvertResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-  const res = await fetch(`${API_BASE}/api/convert${debug ? "?debug=true" : ""}`, {
-    method: "POST",
-    body: formData,
-    signal,
-  });
-  if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Conversion failed (${res.status})`));
-  return res.json();
+async function runOrWrap<T>(request: WorkerCall, signal?: AbortSignal): Promise<T> {
+  try {
+    return await callWorker<T>(request, signal);
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") throw err;
+    throw new ApiError(err instanceof Error ? err.message : "Conversion failed");
+  }
 }
 
-export async function convertText(
-  text: string,
-  debug = false,
-  signal?: AbortSignal
-): Promise<ConvertResponse> {
-  const res = await fetch(`${API_BASE}/api/convert-text${debug ? "?debug=true" : ""}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
-    signal,
-  });
-  if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Conversion failed (${res.status})`));
-  return res.json();
+export async function convertFile(file: File, debug = false, signal?: AbortSignal): Promise<ConvertResponse> {
+  const fileBytes = await file.arrayBuffer();
+  return runOrWrap<ConvertResponse>(
+    { type: "convertFile", fileBytes, originalFilename: file.name, debug },
+    signal
+  );
+}
+
+export async function convertText(text: string, debug = false, signal?: AbortSignal): Promise<ConvertResponse> {
+  return runOrWrap<ConvertResponse>({ type: "convertText", text, debug }, signal);
 }
 
 export async function exportRows(
@@ -91,48 +66,37 @@ export async function exportRows(
   rows: Record<string, unknown>[],
   rule: TransformationRule
 ): Promise<ExportResponse> {
-  const res = await fetch(`${API_BASE}/api/export`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ filename, rows, rule }),
+  const result = await runOrWrap<{ filename: string; buffer: ArrayBuffer }>({
+    type: "exportRows",
+    filename,
+    rows,
+    rule,
   });
-  if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Export failed (${res.status})`));
-  return res.json();
+  return { filename: result.filename, file_base64: arrayBufferToBase64(result.buffer) };
 }
 
 export async function addDescription(
   file: File,
   rows: Record<string, unknown>[]
 ): Promise<AddDescriptionResponse> {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("rows", JSON.stringify(rows));
-  const res = await fetch(`${API_BASE}/api/add-description`, {
-    method: "POST",
-    body: formData,
-  });
-  if (!res.ok) throw new ApiError(await parseErrorDetail(res, `Add Description failed (${res.status})`));
-  return res.json();
+  const fileBytes = await file.arrayBuffer();
+  return runOrWrap<AddDescriptionResponse>({ type: "addDescriptionFromFile", fileBytes, baseRows: rows });
 }
 
-export async function checkHealth(): Promise<boolean> {
-  try {
-    const res = await fetch(`${API_BASE}/api/health`);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-export async function getBackendVersion(): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_BASE}/api/version`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return typeof data.version === "string" ? data.version : null;
-  } catch {
-    return null;
-  }
+/**
+ * Add Description via clipboard paste (V1.10 - fixes the V1.09 gap where
+ * only Drag & Drop / Upload were supported). Accepts whatever the paste
+ * event's `clipboardData` actually carried; `text/html` is preferred when
+ * present (Excel always includes it, and it survives a literal tab/newline
+ * inside a DESC cell), falling back to `text/plain` TSV otherwise - see
+ * `converter/engine.ts`'s `addDescriptionFromClipboard` for the shared
+ * normalization pipeline all three input methods funnel through.
+ */
+export async function addDescriptionFromClipboard(
+  clipboard: { html?: string; text?: string },
+  rows: Record<string, unknown>[]
+): Promise<AddDescriptionResponse> {
+  return runOrWrap<AddDescriptionResponse>({ type: "addDescriptionFromClipboard", clipboard, baseRows: rows });
 }
 
 export function base64ToBlob(base64: string): Blob {
@@ -144,9 +108,10 @@ export function base64ToBlob(base64: string): Blob {
   });
 }
 
-/** Triggers a browser download for a base64-encoded file from the API.
- * Used for Quick Save - immediate, no dialog, goes to the browser's
- * configured default download location. */
+/** Triggers a browser download for a base64-encoded file. Used for Quick
+ * Save - immediate, no dialog, goes to the browser's configured default
+ * download location. Unchanged from V1.09 - this never talked to the
+ * backend in the first place. */
 export function downloadBase64File(filename: string, base64: string): void {
   const blob = base64ToBlob(base64);
   const url = URL.createObjectURL(blob);
@@ -163,9 +128,8 @@ export type SaveAsResult = "saved" | "cancelled" | "fallback";
  * Save As (V1.06): opens the OS-native save dialog via the File System
  * Access API (Chromium-based browsers only) so the user can freely choose
  * folder/filename. On browsers without that API (Firefox, Safari), falls
- * back to the same download-trigger Quick Save uses - most browsers'
- * "always ask where to save" setting still surfaces a save dialog there,
- * just not one this app controls.
+ * back to the same download-trigger Quick Save uses. Unchanged from
+ * V1.09 - this never talked to the backend in the first place.
  *
  * There is no browser API to reveal a saved file in the OS file explorer
  * ("Open Folder") - that would require filesystem access no sandboxed web
