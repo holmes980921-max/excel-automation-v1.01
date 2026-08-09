@@ -71,30 +71,36 @@ describe("Home Reset (V1.09 bug fix)", () => {
     10000
   );
 
-  it("resets the active Transformation Rule back to Default, not just the data", async () => {
-    // Seed a non-default active rule, as if the user customized one during
-    // a previous session - this is exactly the state V1.09's bug report
-    // said leaked across a Home reset.
-    const saved = saveRule({
-      rule_name: "Engineering",
-      output_columns: ["PPID", "TS#"],
-      column_order: ["PPID", "TS#"],
-      aliases: {},
-    });
-    setActiveRuleId(saved.id);
+  it(
+    "resets the active Transformation Rule back to Default, not just the data",
+    async () => {
+      // Seed a non-default active rule, as if the user customized one during
+      // a previous session - this is exactly the state V1.09's bug report
+      // said leaked across a Home reset.
+      const saved = saveRule({
+        rule_name: "Engineering",
+        output_columns: ["PPID", "TS#"],
+        column_order: ["PPID", "TS#"],
+        aliases: {},
+      });
+      setActiveRuleId(saved.id);
 
-    render(<Home />);
-    await convertViaPaste();
-    expect(screen.getByText("Engineering")).toBeInTheDocument(); // StatusBar's "Current Rule"
+      render(<Home />);
+      await convertViaPaste();
+      expect(screen.getByText("Engineering")).toBeInTheDocument(); // StatusBar's "Current Rule"
 
-    fireEvent.click(screen.getByRole("button", { name: /home/i }));
-    const dialogTitle = await screen.findByText("Return to Home?");
-    fireEvent.click(screen.getByRole("button", { name: /^home$/i }));
-    await waitFor(() => expect(dialogTitle).not.toBeInTheDocument());
-    await screen.findByPlaceholderText(/paste excel data/i);
+      fireEvent.click(screen.getByRole("button", { name: /home/i }));
+      const dialogTitle = await screen.findByText("Return to Home?");
+      fireEvent.click(screen.getByRole("button", { name: /^home$/i }));
+      await waitFor(() => expect(dialogTitle).not.toBeInTheDocument());
+      await screen.findByPlaceholderText(/paste excel data/i);
 
-    await convertViaPaste();
-    expect(screen.getByText("Default")).toBeInTheDocument();
-    expect(screen.queryByText("Engineering")).not.toBeInTheDocument();
-  });
+      await convertViaPaste();
+      expect(screen.getByText("Default")).toBeInTheDocument();
+      expect(screen.queryByText("Engineering")).not.toBeInTheDocument();
+    },
+    // Same coverage-instrumentation-overhead flakiness as the test above -
+    // seen intermittently timing out at the default 5000ms (V1.11).
+    10000
+  );
 });
