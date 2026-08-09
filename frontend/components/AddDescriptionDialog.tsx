@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState, type ClipboardEvent } from "react";
 import { useDropzone, type FileRejection } from "react-dropzone";
 import {
   Dialog,
@@ -10,14 +10,18 @@ import {
   Button,
   Box,
   Typography,
+  TextField,
   IconButton,
   Tooltip,
 } from "@mui/material";
-import { FileSpreadsheet, UploadCloud, XCircle, X } from "lucide-react";
+import { FileSpreadsheet, UploadCloud, XCircle, ClipboardPaste, CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
-import { addDescription, type AddDescriptionResponse } from "@/lib/api";
+import { addDescription, addDescriptionFromClipboard, type AddDescriptionResponse } from "@/lib/api";
 import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
+import { summarizePastedText, type PasteSummary } from "@/lib/pasteSummary";
 import ProcessingOverlay from "@/components/ProcessingOverlay";
+
+const PASTE_TEXTAREA_MAX_ROWS = 6;
 
 type Props = {
   open: boolean;
@@ -29,10 +33,23 @@ type Props = {
   onMerged: (data: AddDescriptionResponse) => void;
 };
 
+/**
+ * V1.10: supports all three input methods (Upload, Drag & Drop, Clipboard
+ * Paste) for a Description lookup - V1.09 only had Upload/Drag & Drop.
+ * Paste mirrors HomeScreen's pattern exactly (intercept the paste event so
+ * pasted content never renders raw, show a lightweight summary instead),
+ * and all three methods funnel through the same normalization + merge
+ * pipeline in `converter/engine.ts`, so results are identical regardless
+ * of how the data got in.
+ */
 export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged }: Props) {
   const [file, setFile] = useState<File | null>(null);
+  const [pastedText, setPastedText] = useState("");
+  const [pasteSummary, setPasteSummary] = useState<PasteSummary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const rawPasteTextRef = useRef("");
+  const rawPasteHtmlRef = useRef<string | undefined>(undefined);
 
   const onDrop = useCallback((accepted: File[], rejections: FileRejection[]) => {
     if (rejections.length > 0) {
@@ -41,6 +58,10 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
     }
     if (accepted[0]) {
       setFile(accepted[0]);
+      setPastedText("");
+      setPasteSummary(null);
+      rawPasteTextRef.current = "";
+      rawPasteHtmlRef.current = undefined;
       setError(null);
     }
   }, []);
@@ -52,14 +73,45 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
     disabled: loading,
   });
 
+  const handlePasteChange = (value: string) => {
+    setPastedText(value);
+    if (value.trim()) setFile(null);
+  };
+
+  // Same large-paste-safe interception pattern as HomeScreen (V1.08): the
+  // raw pasted text/html never touches rendered state, only a summary does.
+  const handleTextPaste = (e: ClipboardEvent<Element>) => {
+    const text = e.clipboardData.getData("text/plain");
+    const html = e.clipboardData.getData("text/html");
+    if (!text && !html) return;
+    e.preventDefault();
+    rawPasteTextRef.current = text;
+    rawPasteHtmlRef.current = html || undefined;
+    setPasteSummary(summarizePastedText(text || html));
+    setPastedText("");
+    setFile(null);
+    setError(null);
+  };
+
+  const handleClearPaste = () => {
+    rawPasteTextRef.current = "";
+    rawPasteHtmlRef.current = undefined;
+    setPasteSummary(null);
+    setPastedText("");
+  };
+
   const handleMerge = async () => {
-    if (loading || !file) return;
+    const pasteText = pasteSummary ? rawPasteTextRef.current : pastedText;
+    const hasPaste = !!pasteText.trim() || !!rawPasteHtmlRef.current;
+    if (loading || (!file && !hasPaste)) return;
     setLoading(true);
     setError(null);
     try {
-      const data = await addDescription(file, baseRows);
+      const data = file
+        ? await addDescription(file, baseRows)
+        : await addDescriptionFromClipboard({ text: pasteText, html: rawPasteHtmlRef.current }, baseRows);
       onMerged(data);
-      setFile(null);
+      resetInputs();
       onClose();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unexpected error while adding description.";
@@ -70,9 +122,17 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
     }
   };
 
+  const resetInputs = () => {
+    setFile(null);
+    setPastedText("");
+    setPasteSummary(null);
+    rawPasteTextRef.current = "";
+    rawPasteHtmlRef.current = undefined;
+  };
+
   const handleClose = () => {
     if (loading) return;
-    setFile(null);
+    resetInputs();
     setError(null);
     onClose();
   };
@@ -92,6 +152,8 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
       ? "rgba(46, 125, 50, 0.06)"
       : "transparent";
 
+  const canMerge = !!file || !!pasteSummary || !!pastedText.trim();
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Add Description</DialogTitle>
@@ -99,66 +161,127 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
         <ProcessingOverlay open={loading} fileSizeMB={file ? file.size / (1024 * 1024) : undefined} />
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Upload a Description file with PPID and DESC columns. DESC is added to every converted row whose
-          PPID matches - rows with no match are left as is.
+          Provide a Description lookup with PPID and DESC columns - upload a file, drag & drop, or paste
+          directly from Excel. DESC is added to every converted row whose PPID matches - rows with no
+          match are left as is.
         </Typography>
 
-        {file ? (
-          <Box
-            sx={{
-              border: "2px dashed",
-              borderColor: "success.main",
-              borderRadius: 2,
-              background: "rgba(46, 125, 50, 0.06)",
-              p: 3,
-            }}
-          >
-            <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
-              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                  <FileSpreadsheet size={16} color="#2e7d32" />
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    Selected File
+        <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+          <Box sx={{ flex: "1 1 220px" }}>
+            {file ? (
+              <Box
+                sx={{
+                  border: "2px dashed",
+                  borderColor: "success.main",
+                  borderRadius: 2,
+                  background: "rgba(46, 125, 50, 0.06)",
+                  p: 2,
+                  height: "100%",
+                }}
+              >
+                <Box sx={{ background: "#fff", borderRadius: 1, p: 1.5, textAlign: "left" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                      <FileSpreadsheet size={16} color="#2e7d32" />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        Selected File
+                      </Typography>
+                    </Box>
+                    <Tooltip title="Remove">
+                      <IconButton size="small" aria-label="Remove" onClick={handleRemoveFile} disabled={loading}>
+                        <X size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
+                    {file.name}
                   </Typography>
                 </Box>
-                <Tooltip title="Remove">
-                  <IconButton size="small" aria-label="Remove" onClick={handleRemoveFile} disabled={loading}>
-                    <X size={14} />
-                  </IconButton>
-                </Tooltip>
               </Box>
-              <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
-                {file.name}
-              </Typography>
+            ) : (
+              <Box
+                {...getRootProps()}
+                sx={{
+                  border: "2px dashed",
+                  borderColor: dropzoneBorderColor,
+                  borderRadius: 2,
+                  p: 2,
+                  textAlign: "center",
+                  cursor: loading ? "default" : "pointer",
+                  background: dropzoneBackground,
+                  transition: "border-color 0.15s ease, background 0.15s ease",
+                  height: "100%",
+                }}
+              >
+                <input {...getInputProps()} />
+                <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
+                  {isDragReject ? <XCircle size={26} color="#d32f2f" /> : <UploadCloud size={26} />}
+                </Box>
+                <Typography variant="body2" color={isDragReject ? "error" : "text.secondary"}>
+                  {isDragReject
+                    ? "This file type isn't supported"
+                    : isDragActive
+                      ? "Drop the file here"
+                      : "Drag & drop, or click to choose a .xls/.xlsx/.xlsm file"}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+
+          <Box sx={{ flex: "1 1 220px" }}>
+            <Box
+              sx={{
+                border: "2px dashed",
+                borderColor: pastedText || pasteSummary ? "success.main" : "divider",
+                borderRadius: 2,
+                p: 2,
+                textAlign: "center",
+                background: pastedText || pasteSummary ? "rgba(46, 125, 50, 0.06)" : "transparent",
+                height: "100%",
+              }}
+            >
+              {pasteSummary ? (
+                <Box sx={{ background: "#fff", borderRadius: 1, p: 1.5, textAlign: "left" }}>
+                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                      <CheckCircle2 size={16} color="#2e7d32" />
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        Clipboard Loaded
+                      </Typography>
+                    </Box>
+                    <Tooltip title="Clear">
+                      <IconButton size="small" aria-label="Clear" onClick={handleClearPaste} disabled={loading}>
+                        <X size={14} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary">
+                    Rows: {pasteSummary.rows.toLocaleString()}
+                  </Typography>
+                </Box>
+              ) : (
+                <>
+                  <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
+                    <ClipboardPaste size={26} />
+                  </Box>
+                  <TextField
+                    multiline
+                    minRows={2}
+                    maxRows={PASTE_TEXTAREA_MAX_ROWS}
+                    fullWidth
+                    size="small"
+                    disabled={loading}
+                    placeholder="Ctrl + V - Paste PPID/DESC data"
+                    value={pastedText}
+                    onChange={(e) => handlePasteChange(e.target.value)}
+                    onPaste={handleTextPaste}
+                    sx={{ background: "#fff" }}
+                  />
+                </>
+              )}
             </Box>
           </Box>
-        ) : (
-          <Box
-            {...getRootProps()}
-            sx={{
-              border: "2px dashed",
-              borderColor: dropzoneBorderColor,
-              borderRadius: 2,
-              p: 4,
-              textAlign: "center",
-              cursor: loading ? "default" : "pointer",
-              background: dropzoneBackground,
-              transition: "border-color 0.15s ease, background 0.15s ease",
-            }}
-          >
-            <input {...getInputProps()} />
-            <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
-              {isDragReject ? <XCircle size={28} color="#d32f2f" /> : <UploadCloud size={28} />}
-            </Box>
-            <Typography color={isDragReject ? "error" : "text.secondary"}>
-              {isDragReject
-                ? "This file type isn't supported"
-                : isDragActive
-                  ? "Drop the file here"
-                  : "Drag & drop a .xls, .xlsx, or .xlsm file here, or click to choose one"}
-            </Typography>
-          </Box>
-        )}
+        </Box>
 
         {error && (
           <Typography color="error" variant="body2" sx={{ mt: 2 }}>
@@ -170,7 +293,7 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
         <Button onClick={handleClose} disabled={loading}>
           Cancel
         </Button>
-        <Button variant="contained" disabled={!file || loading} onClick={handleMerge}>
+        <Button variant="contained" disabled={!canMerge || loading} onClick={handleMerge}>
           Add Description
         </Button>
       </DialogActions>
