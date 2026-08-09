@@ -112,17 +112,22 @@ ever touching a real Worker.
   them could have regressed from this migration without their own mocks changing, which they
   didn't need to.
 - **The real Worker (`worker.ts`) and its main-thread client (`workerClient.ts`) are not exercised
-  by any automated test.** `jsdom` (Vitest's test environment) has no Worker implementation, and
-  every component test mocks `@/lib/api` wholesale rather than going through the real
-  worker-calling code path. What *is* verified: `next dev` boots and serves the app without an
-  import-time crash (confirming the module graph, including `workerClient.ts`'s top-level code,
-  loads cleanly), and `new Worker(new URL("./worker.ts", import.meta.url))` is Next.js's own
-  documented, officially-supported pattern for bundling a worker in both webpack and Turbopack. But
-  actual click-through verification (drag a file in, paste into a real clipboard event, watch
-  Abort terminate a real computation, download a real file) was not performed in a live browser -
-  no browser automation tool is available in this environment, the same disclosed limitation as
-  every prior version's code review, but more consequential here since the Worker is new
-  infrastructure this version introduced rather than already-shipped code being re-verified.
+  by any automated unit test.** `jsdom` (Vitest's test environment) has no Worker implementation,
+  and every component test mocks `@/lib/api` wholesale rather than going through the real
+  worker-calling code path. This gap is real, but narrower than it might sound - after the actual
+  GitHub Pages deploy (see Section 8), the deployed bundle was inspected directly: webpack compiles
+  `worker.ts` into a numbered chunk (`716.<hash>.js`, code-split like any other module, not a
+  separately-named "worker" file) referenced from the main bundle via
+  `new Worker(new URL(...), ...)`; that chunk is confirmed present in the build artifact, contains
+  the actual engine code (`grep` for `"No TS# data found"`, a string literal from
+  `engine.ts`, matches), and is served with `HTTP 200` from the live basePath-prefixed URL
+  (`/excel-automation-v1.01/_next/static/chunks/716.<hash>.js`) - confirming both that Next.js's
+  Worker-bundling pattern survives static export and that the dynamic `new URL()` construction
+  correctly picks up the GitHub Pages basePath. What remains genuinely unverified is *runtime*
+  behavior inside the worker in a real browser (message round-trip, `postMessage`/`Transferable`
+  handling, actual Abort-via-`terminate()`) - no browser automation tool is available in this
+  environment to click through Upload → Convert → Add Description Paste → Abort → Save
+  end-to-end, the same disclosed limitation as every prior version's code review.
 - `next build` fails locally with the same pre-existing, disclosed `EISDIR` bug documented since
   V1.03 (confirmed to be the same root cause: the target path is an ordinary file, not a symlink,
   and the error reproduces with or without `output: "export"`) - this is why the actual production
@@ -178,18 +183,38 @@ call, simplifying it).
 - No new business features, no UI redesign, no auth/database/server-side rule sync - all
   explicitly out of scope per the spec's own Section 16, and none were added.
 
-## 8. Release Recommendation
+## 8. Release Recommendation & Deployment Verification
 
-**Ship it, with the Worker-integration caveat disclosed to the user before real-user traffic
-arrives.** The part of this migration with the highest risk of silent behavioral drift - the
+**Shipped.** The `browser-edition` branch is deployed and live at
+`https://holmes980921-max.github.io/excel-automation-v1.01/`, confirmed by fetching the deployed
+URL directly (`HTTP 200`, correct title, all asset paths correctly prefixed with the GitHub Pages
+basePath) and by downloading and inspecting the actual build artifact GitHub Actions published
+(see Section 5's Worker-chunk verification). Two real CI issues surfaced and were fixed during this
+first deploy, worth recording since they're now resolved but were genuine failures, not
+false starts:
+
+1. `npm test -- run` in the workflow forwarded `"run"` to Vitest as a test-file filter pattern
+   (`package.json`'s `test` script is already `vitest run`) - "No test files found, exiting with
+   code 1" on the very first attempt. Fixed by removing the extra argument.
+2. The workflow's Node 20 didn't have a new enough bundled `undici` for jsdom 30's `CacheStorage`
+   polyfill (`webidl.util.markAsUncloneable is not a function`), failing every test file before any
+   of them could run. Fixed by bumping the workflow to Node 22 (matching local development, which
+   already runs Node 24 without issue).
+3. The `github-pages` deployment environment's branch protection rule only allowed the default
+   branch by default - `browser-edition` was rejected until explicitly added to the environment's
+   allowed-branches list.
+
+None of these were code defects in the application itself - all three were CI/deployment
+configuration gaps that only a real deploy attempt could surface, which is exactly why "the actual
+deployed GitHub Pages URL must be tested" (this version's own spec) rather than trusting a local
+build. The part of this migration with the highest risk of silent behavioral drift - the
 conversion/rule/merge logic itself - has the strongest evidence behind it in this project's
-history: a direct, field-for-field comparison against the actual Python engine on real files, not
-a port that "looks equivalent" by inspection. The part with the least evidence - the Worker
-transport layer - is also the smallest and simplest piece of new code (pure message-passing, no
-business logic), and follows Next.js's own documented pattern rather than a custom one. Recommend a
-short manual smoke pass in an actual browser (upload, paste, Abort mid-conversion, Quick Save, Save
-As) before or immediately after the first GitHub Pages deploy, specifically because that's the one
-path this review could not verify directly.
+history: a direct, field-for-field comparison against the actual Python engine on real files. The
+part with the least *unit-test* evidence - the Worker transport layer - now has direct deployment-
+level evidence instead (Section 5). Recommend a short manual smoke pass in an actual browser
+(upload, paste, Abort mid-conversion, Quick Save, Save As) against the live URL before directing
+real users to it, specifically because live click-through interaction is the one thing this review
+could not perform itself.
 
 ## Overall Grade: **A-**
 
@@ -205,10 +230,13 @@ before shipping, which is exactly what a test suite is for.
 
 **Why not A**: the one thing this review cannot honestly claim is "verified end-to-end in a real
 browser" - the Worker transport layer, which is new infrastructure central to this version's
-entire architecture, has zero direct test coverage and no live interactive verification, for
-reasons outside this session's control (no browser automation tool) but real nonetheless. A
-migration whose riskiest new component is also its least-verified one is a legitimate, if
-disclosed, gap - not a reason to withhold the release, but a reason not to call it flawless.
+entire architecture, has zero automated *unit*-test coverage, and the deployment-level checks in
+Section 5/8 (bundle inspection, live chunk fetch) confirm the pieces are correctly built and
+served but not that a real click-through conversion succeeds interactively, for reasons outside
+this session's control (no browser automation tool) but real nonetheless. A migration whose
+riskiest new component has strong static/deployment evidence but no interactive evidence is a
+narrower, more clearly-bounded gap than it started as - not a reason to withhold the release, but
+still a reason not to call it flawless.
 
 **What would move this to A**: a Playwright/browser-based smoke test added to the CI workflow that
 actually drives the deployed (or a local) build through Upload → Convert → Add Description Paste →
