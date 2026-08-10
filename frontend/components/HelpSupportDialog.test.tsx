@@ -66,6 +66,19 @@ describe("HelpSupportDialog", () => {
     expect(screen.getByText("jong10k.kim")).toBeInTheDocument();
   });
 
+  // Regression test for the V1.11 follow-up bug: NEXT_PUBLIC_BASE_PATH
+  // wasn't actually wired into the deployed build, so every doc fetch hit
+  // the wrong (un-prefixed) URL on GitHub Pages and 404'd - this proves
+  // the dialog surfaces that failure visibly rather than staying blank,
+  // and separately (next.config.test.ts) that the basePath wiring itself
+  // is correct so this 404 path isn't hit in production.
+  it("shows a clear error on the User Guide tab if the doc fails to load (404)", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
+    render(<HelpSupportDialog open={true} onClose={vi.fn()} />);
+
+    expect(await screen.findByText(/Could not load USER_GUIDE documentation \(404\)/)).toBeInTheDocument();
+  });
+
   it("calls onClose when Close is clicked", () => {
     mockDocsFetch();
     const onClose = vi.fn();

@@ -1,122 +1,185 @@
 # User Guide
 
-A step-by-step walkthrough of RCC Excel Automation, from your first conversion to exporting a finished file. No developer knowledge required.
+## 1. Overview
 
-## Getting Started
+**RCC Excel Automation** converts a PPID / Parameter / Reference Value data export from RCC into a
+flat table - one row per `TS#` block - ready for review and further use. It runs entirely in your
+browser: nothing you upload or paste is ever sent to a server, and there is nothing to install.
 
-RCC Excel Automation runs entirely in your browser. There is nothing to install, nothing to log into, and nothing you paste or upload is ever sent to a server - everything happens on your own computer.
+It's intended for anyone who regularly turns an RCC data export into a clean, reviewable Excel
+file, without needing to write a script or perform the reshaping by hand.
 
-When you open the app you land directly on the **Home** screen, with two ways to bring in data: **Upload** (drag & drop or browse for a file) and **Paste** (Ctrl+V).
+## 2. Basic Workflow
 
-## Input Data
+The complete workflow, start to finish:
 
-**The normal way to use this app is with data copied directly from RCC:**
+```
+Get the data from RCC → Input the data → Convert → Preview → Export the result
+```
 
-> RCC → Download data → Copy the RCC-downloaded data → RCC Excel Automation → Clipboard Paste → Convert
+1. **Get the data from RCC** - download or copy your data from RCC as usual.
+2. **Input the data** - upload the file, drag & drop it, or paste it directly into RCC Excel
+   Automation.
+3. **Convert** - click Convert and the app reshapes the data locally.
+4. **Preview** - review the result in the grid before doing anything else with it.
+5. **Export the result** - save the finished file with Quick Save or Save As.
 
-1. Download your data from RCC as usual.
-2. Open the downloaded file and copy the range you need (including the header row).
-3. Come back to RCC Excel Automation and click into the **Paste** panel on the Home screen.
-4. Press **Ctrl+V**. Copying is a click-through Excel workflow - nothing needs to be reformatted first.
+## 3. Conversion Input
 
-### If Clipboard Paste doesn't work
+**Use the file downloaded directly from RCC whenever possible** - there's no need to reformat it
+or build a special template first; if it already has the shape RCC exports, it converts correctly.
 
-Some browsers or security settings block a direct paste. If pasting doesn't seem to pick up your data:
+### Supported input methods
 
-1. Open the file you downloaded from RCC in Excel.
-2. Press **Ctrl+A** to select the entire dataset.
-3. Press **Ctrl+C** to copy it.
-4. Return to RCC Excel Automation.
-5. Click into the **Paste** panel and press **Ctrl+V** again.
+- **File Upload** - click the Upload panel on the Home screen to browse for a file.
+- **Drag & Drop** - drag the file directly onto the Upload panel.
+- **Clipboard Paste** - copy a range out of Excel (including the header row) and paste it into the
+  Paste panel with Ctrl+V.
+
+### If Clipboard Paste doesn't work as expected
+
+1. Open the Excel file you downloaded from RCC.
+2. Press **Ctrl+A** to select the entire data.
+3. Press **Ctrl+C**.
+4. Return to RCC Excel Automation and paste it into the Paste panel.
 
 This full-select-and-copy approach resolves the most common paste issues.
 
-**File Upload** works the same way if you'd rather save the RCC download as a file first: drag it onto the Upload panel, or click the panel to browse for it. `.xls`, `.xlsx`, and `.xlsm` are all supported.
+## 4. Transformation Rule
 
-### What columns does the app expect?
+A Transformation Rule controls which columns appear in your output, in what order, and under what
+name. The **Default** rule (always available) shows every column in the standard order; you only
+need to touch this section if you want something different.
 
-The converter looks for three columns in your data: **PPID**, **Parameter**, and a reference/value column (matched by a header containing "ref" or "value", e.g. `Reference Value`). It finds these by column *name*, so extra columns in your export (operator name, timestamps, comments, etc.) are simply ignored rather than causing an error. If your file's headers don't match these names, the app falls back to reading the first three columns positionally.
+Open **Settings → Show Advanced Features**, then click **Transformation Rules** in the toolbar to:
 
-Example (fictional data, for illustration only):
+- **Select output columns** - check or uncheck which columns are included.
+- **Change column order** - drag a column's handle (⋮⋮) to reorder it.
+- **Set display aliases** - type a different header name for a column (the underlying data field
+  itself never changes, only what's displayed/exported).
+- **Save / update / delete rules** - keep multiple named rules and switch between them.
+- **Import / export rules** - share a rule with a teammate as a `.json` file.
 
-| PPID | Parameter | Reference Value |
-|---|---|---|
-| AB000010_1 | PPID | AB000010_1 |
-| AB000010_1 | TS#1_CardName | CARD1 |
-| AB000010_1 | TS#1_FilmMaterial | FILM-A |
-| AB000020_1 | PPID | AB000020_1 |
-| AB000020_1 | TS#1_CardName | CARD2 |
+The Preview grid updates instantly as you edit a rule.
 
-You do not need to build a special template - if your RCC export already has this shape, it will convert correctly.
+## 5. Add Description
 
-## Convert
+Add Description merges a `DESC` column onto your converted data by matching `PPID`, so you don't
+have to do a manual VLOOKUP/XLOOKUP afterward.
 
-Once you've selected a file or pasted data, the **Convert** button becomes active. Click it and the app processes your data locally (in a background thread, so the page stays responsive even for a large file). A processing overlay shows while this happens, with an **Abort** option if you need to cancel.
+Click **Add Description** in the toolbar once you have a conversion result, then provide your
+Description data (a `PPID` column and a `DESC` or `Description` column) using any of:
 
-## Preview
+- **File Upload**
+- **Drag & Drop**
+- **Clipboard Paste**
 
-After converting, you land on the Preview screen: a spreadsheet-style grid showing every converted row, one row per `TS#` block.
+All three produce identical results for the same data.
 
-- **Preview Rows** (top toolbar) controls how many rows are *rendered*: 100 (default), 500, 1000, 5000, or All. This is purely a display setting - your full dataset is always used for search, sort, and export regardless of this setting.
-- Selecting **All** on a very large dataset can be slower, since the browser has to render every row - a confirmation appears first so this is never accidental.
+- **PPID-based matching**: every converted row whose `PPID` matches a row in your Description data
+  receives that `DESC` value. Rows sharing the same `PPID` all receive the same `DESC`.
+- **Matched / Unmatched results**: after merging, the Status Bar shows how many PPIDs matched and
+  how many didn't. Rows with no match keep a `-` in the DESC column.
+- **Duplicate PPIDs** in your Description data are rejected with an error listing which PPIDs
+  repeat - fix the source data (remove or consolidate the duplicates) and try again.
 
-## Search
+### How to clear/remove incorrect input
 
-Type into the Search box in the toolbar. Search always runs against your **entire converted dataset**, not just the rows currently visible under Preview Rows - so if Preview Rows is set to 100 but your search matches 340 rows, the match count will correctly say 340, even though only the first 100 of those matches are shown at once.
+If you selected the wrong file or pasted the wrong data - either on the Home screen or in Add
+Description - click **Remove** (next to a selected file) or **Clear** (next to a pasted-data
+summary) to discard it and start over, without needing to convert or close the dialog first.
 
-## Sort
+## 6. Preview and Review
 
-Click any column header in the grid to sort by that column. Click again to reverse the sort, and a third time to clear it. Sorting understands both text and numbers (e.g. `TS#2` sorts before `TS#10`, not after it alphabetically).
+After converting, review your result before doing anything else with it:
 
-## Transformation Rules
+- **Preview Rows** (toolbar) controls how many rows the grid actually renders: 100 (default), 500,
+  1000, 5000, or All. This only affects what's displayed - your full dataset is always used for
+  search, sort, and export regardless of this setting. Choosing **All** on a large dataset can be
+  slower to render, since the browser has to draw every row.
+- **Search** (toolbar) always matches against your entire converted dataset, not just the rows
+  currently visible - the match count is always accurate even if Preview Rows is limiting what's
+  shown.
+- **Sort** - click a column header to sort by it, click again to reverse, and a third time to
+  clear the sort. Numbers and `TS#` labels sort naturally (`TS#2` before `TS#10`).
+- **Checking the result before export** - confirm the row count, column order, and (if used) the
+  DESC column all look right in the Preview grid before saving.
 
-By default the app shows every output column in a fixed order. If you need a different shape - fewer columns, a different order, or different column headers - open **Settings → Show Advanced Features**, then click **Transformation Rules** in the toolbar.
-
-- **Output columns**: check or uncheck which columns appear.
-- **Column order**: drag the handle (⋮⋮) next to each column to reorder it.
-- **Display aliases**: type into a column's alias field to change its header text in the preview and exported file (the underlying data field itself never changes).
-- **Save / Update / Delete**: save your current settings as a named rule, update an existing one, or remove it. Rules are stored in your browser only.
-- **Import / Export**: share a rule with a teammate as a `.json` file.
-
-The preview grid updates instantly as you edit a rule - there's no separate "apply" step.
-
-## Add Description
-
-If you have a separate file mapping PPID to a description, you can merge it in after converting. Click **Add Description** in the toolbar.
-
-```
-Converted Data + Description Data → PPID-based Merge → DESC
-```
-
-All three input methods work identically:
-
-- **File Upload** - click the Add Description panel to browse for a file.
-- **Drag & Drop** - drag a file directly onto the panel.
-- **Clipboard Paste** - copy a PPID/DESC range from Excel and paste it directly into the panel, the same way you paste on the Home screen.
-
-Your Description data needs a `PPID` column and a `DESC` (or `Description`) column, matched by name. Every converted row whose PPID matches gets that DESC value; rows sharing the same PPID all receive the same DESC. Rows with no match are left as `-`.
-
-**Duplicate PPIDs** in your Description data are rejected with an error listing which PPIDs repeat - there's no reliable way to guess which one you meant, so please fix the source data and try again.
-
-After merging, the Status Bar shows how many PPIDs matched and how many didn't, and the grid shows a new **DESC** column positioned immediately after **PPID** - this position is fixed and doesn't change based on your Transformation Rule.
-
-## Export
+## 7. Export
 
 Two ways to save your result, both in the toolbar:
 
-- **Quick Save** - downloads immediately to your browser's default download location, with an auto-generated filename: `RCC_converted_YYMMDD_HHMMSS.xlsx`.
-- **Save As** - opens your OS's native save dialog so you can choose the folder and filename yourself (Chrome/Edge only - other browsers fall back to the same behavior as Quick Save, since they don't support this browser feature).
+- **Quick Save** - downloads immediately with an auto-generated filename
+  (`RCC_converted_YYMMDD_HHMMSS.xlsx`) to your browser's default download location.
+- **Save As** - opens your operating system's native save dialog so you can choose the folder and
+  filename yourself. This only works in Chrome/Edge-family browsers; other browsers fall back to
+  the same behavior as Quick Save.
 
-The column order in your downloaded file always exactly matches what you see in the Preview grid, including your active Transformation Rule and, if used, the DESC column immediately after PPID.
+**Verify the output before using it for downstream work** - the column order in the downloaded
+file always exactly matches what you saw in the Preview grid, including your active Transformation
+Rule and, if used, the DESC column immediately after PPID, but it's still worth a quick open-and-
+check before relying on it further.
 
-## Home
+## 8. Error Handling
 
-Click **Home** (top-left, always visible) to start over with a new file. If you have an active result, you'll be asked to confirm first - nothing is discarded silently. Home fully resets the app: the file/pasted data, preview, search, Add Description result, and the active Transformation Rule all return to their starting state.
+### What to do when conversion fails
 
-## Abort
+Read the on-screen message first - many are self-explanatory (e.g. an unsupported file type). If
+it's not clear what went wrong, use Show Details (below) to get more information, or check the
+[Troubleshooting](#9-troubleshooting) section.
 
-While a conversion is running, click **Abort** on the processing overlay to cancel it. RCC Excel Automation runs conversions in a background thread, so Abort genuinely stops the in-progress work - it isn't just hiding a result that keeps computing in the background.
+### What "Show Details" means
 
-## Error Handling
+When a conversion or Add Description attempt fails unexpectedly, a **Show Details** action appears
+next to the error message. It opens a technical diagnostic view - timestamp, application version,
+error message, stack trace, and browser/OS information - meant to help reproduce and fix the
+problem. It is **not** a developer Debug Mode, and it never includes your data (no PPID, TS#, DESC,
+Parameter, or Reference Value).
 
-If something goes wrong - an unreadable file, unexpected data, or an unrelated application error - you'll see a plain-language error message. For a genuine problem you need to report, see [Error Details](#error-details-copy-log) in Help & Support or the [Troubleshooting Guide](./TROUBLESHOOTING.md).
+### How to use "Copy Log"
+
+Inside the Show Details view, click **Copy Log** to copy the full diagnostic text to your
+clipboard. You'll see a short "Log copied to clipboard" confirmation. Paste it into your bug report
+or message to the developer, along with a short description of what you were doing.
+
+### Developer contact
+
+If a problem persists after checking the FAQ and Troubleshooting guide, contact the developer:
+
+**Developer: jong10k.kim**
+
+## 9. Troubleshooting
+
+**Incorrect RCC input** - double-check you copied/uploaded the complete range from your RCC
+download, including the header row. If the input doesn't contain any recognizable
+`TS#<n>_<field>` data under a `PPID` row, conversion reports an error rather than producing an
+empty result.
+
+**Clipboard paste failure** - use the Ctrl+A / Ctrl+C fallback described in
+[Conversion Input](#3-conversion-input), or use File Upload / Drag & Drop instead.
+
+**Add Description mismatch** - confirm your Description data has a `PPID` column and a `DESC` (or
+`Description`) column, matched by name. A "duplicate PPID" error means the same PPID appears more
+than once in your Description data - the message lists which ones, so you can fix the source file.
+
+**Conversion failure** - open Show Details for the technical error message, and check the
+Troubleshooting notes in Help & Support for the specific error you're seeing.
+
+**Browser refresh/retry** - if the app seems stuck or behaves unexpectedly, refreshing the page
+returns it to a clean starting state (nothing is saved server-side to lose). Try the same action
+again afterward.
+
+**When to contact the developer** - if a problem persists after trying the above, click **Copy
+Log** from Show Details and send it to **jong10k.kim** along with what you were doing when it
+happened.
+
+## 10. Important Notes
+
+- Do not manually modify RCC source data before conversion unless necessary - the converter is
+  designed to read RCC's export format directly.
+- Always verify the Preview before exporting - confirm row count, column order, and (if used) the
+  DESC column look correct.
+- Do not share sensitive business data unnecessarily.
+- Error logs must not contain business data such as PPID, TS#, Description, Parameter, or
+  Reference Value - if you ever see any of these in a copied diagnostic log, stop and report it to
+  the developer, since that would be a bug in the logging itself, not expected behavior.

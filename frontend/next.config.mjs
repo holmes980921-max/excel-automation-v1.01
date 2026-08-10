@@ -17,6 +17,13 @@ const nextConfig = {
   images: { unoptimized: true },
   basePath: isGithubPagesBuild ? REPO_BASE_PATH : "",
   assetPrefix: isGithubPagesBuild ? REPO_BASE_PATH : "",
+  // V1.11: exposed to the client so runtime `fetch()` calls (e.g. Help &
+  // Support's markdown docs under public/docs/) can prefix the basePath
+  // themselves - unlike next/image or next/link, a raw fetch() doesn't get
+  // basePath applied automatically.
+  env: {
+    NEXT_PUBLIC_BASE_PATH: isGithubPagesBuild ? REPO_BASE_PATH : "",
+  },
 };
 
 export default nextConfig;
