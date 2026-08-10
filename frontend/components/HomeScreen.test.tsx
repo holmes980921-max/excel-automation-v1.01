@@ -124,20 +124,22 @@ describe("HomeScreen", () => {
     });
   });
 
-  describe("Initial screen guidance (V1.13)", () => {
-    it("renders the four-step RCC workflow guide with the product-specific names intact", () => {
+  describe("No redundant page-level guide (V1.13 follow-up fix)", () => {
+    it("does not render a separate 'How to get your data' guide section - the placeholder is the only instructions", () => {
       render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-
-      expect(screen.getByText(/All Export to Excel/)).toBeInTheDocument();
-      expect(screen.getByText(/EXPORT_ALL_TABLE_%%\.xls/)).toBeInTheDocument();
-      expect(screen.getByText(/Ctrl\+A, then Ctrl\+C/)).toBeInTheDocument();
-      expect(screen.getByText(/Paste the data into the web application and click Convert/)).toBeInTheDocument();
+      expect(screen.queryByText(/how to get your data/i)).not.toBeInTheDocument();
+      // The steps still exist, but only inside the placeholder attribute -
+      // not as separately rendered text content on the page.
+      expect(screen.queryByText(/All Export to Excel/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/EXPORT_ALL_TABLE_%%\.xls/)).not.toBeInTheDocument();
     });
 
-    it("does not mention uploading or dragging a file anywhere in the guidance", () => {
+    it("still shows the RCC workflow instructions via the paste-area placeholder", () => {
       render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-      expect(screen.queryByText(/upload.*file/i)).not.toBeInTheDocument();
-      expect(screen.queryByText(/drag.*drop/i)).not.toBeInTheDocument();
+      const textarea = pasteTextarea();
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("All Export to Excel"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("EXPORT_ALL_TABLE_%%.xls"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("Ctrl+A"));
     });
   });
 

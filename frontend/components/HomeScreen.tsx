@@ -19,23 +19,15 @@ const PASTE_TEXTAREA_MAX_ROWS = 10;
 
 // V1.13: Clipboard Paste is the only supported Conversion Input method -
 // "All Export to Excel" and "EXPORT_ALL_TABLE_%%.xls" are RCC's own product
-// names and must not be reworded. Shown both as this placeholder (inside
-// the empty input) and as the page-level numbered guide below, so the
-// instructions are visible whether or not the user has scrolled to/focused
-// the input yet.
+// names and must not be reworded. Shown only here (the placeholder) - a
+// separate page-level guide repeating the same steps was removed as
+// redundant (V1.13 follow-up fix).
 const PASTE_PLACEHOLDER = `Paste RCC data here
 
 1. Save the RCC Excel file using "All Export to Excel".
 2. Open the file "EXPORT_ALL_TABLE_%%.xls".
 3. Press Ctrl+A, then Ctrl+C.
 4. Paste the data here and click Convert.`;
-
-const GUIDE_STEPS = [
-  'Save the RCC Excel file using "All Export to Excel".',
-  'Open the file "EXPORT_ALL_TABLE_%%.xls".',
-  "Press Ctrl+A, then Ctrl+C.",
-  "Paste the data into the web application and click Convert.",
-];
 
 type Props = {
   onConverted: (data: ConvertResponse) => void;
@@ -161,19 +153,6 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
           RCC Excel Automation
         </Typography>
         <Divider sx={{ mb: 3 }} />
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, textAlign: "center" }}>
-            How to get your data
-          </Typography>
-          <Box component="ol" sx={{ m: 0, pl: 3 }}>
-            {GUIDE_STEPS.map((step) => (
-              <Typography key={step} component="li" variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
-                {step}
-              </Typography>
-            ))}
-          </Box>
-        </Box>
 
         <Box
           sx={{
