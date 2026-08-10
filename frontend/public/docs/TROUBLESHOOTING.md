@@ -14,13 +14,32 @@ For any problem, this is the recommended order:
 
 ## Common issues
 
+### Paste does not contain the expected data
+
+1. Open **"EXPORT_ALL_TABLE_%%.xls"** (saved via RCC's **"All Export to Excel"**).
+2. Press **Ctrl+A**.
+3. Press **Ctrl+C**.
+4. Return to the application.
+5. Paste again into the Conversion Input area.
+
+Re-copying the full sheet, rather than a partial selection, resolves the most common paste issues.
+
+### I tried to upload a file / drag and drop a file
+
+File Upload and Drag & Drop are intentionally not supported in V1.13. Clipboard Paste is the only
+supported Conversion Input method - see [Paste does not contain the expected data](#paste-does-not-contain-the-expected-data)
+above for the copy/paste steps.
+
+### Conversion fails after paste
+
+1. Confirm the data came from the RCC export (not a manually edited or partial copy).
+2. Confirm the entire sheet was copied, not just a portion of it.
+3. Retry using Ctrl+A → Ctrl+C → Paste.
+4. If the problem persists, use **Error Details** / **Copy Log** (see [General approach](#general-approach) above) and send the log to the developer - the log never includes your data (PPID, TS#, DESC, Parameter, or Reference Value), only technical diagnostic information.
+
 ### Conversion failed / the grid stays empty
 
-The most common cause is that the input doesn't contain any recognizable `TS#<n>_<field>` data under a `PPID` row - the app intentionally reports an error rather than silently producing an empty result. Double-check that you copied/uploaded the full range, including the header row, from your RCC download.
-
-### Clipboard Paste doesn't seem to work
-
-Some browsers or security settings block a direct paste event. Use the fallback procedure: open the file in Excel, **Ctrl+A** to select everything, **Ctrl+C** to copy, then return to RCC Excel Automation and paste again. See the [User Guide](./USER_GUIDE.md#if-clipboard-paste-doesnt-work) for the full steps. File Upload or Drag & Drop are always available as alternatives.
+The most common cause is that the input doesn't contain any recognizable `TS#<n>_<field>` data under a `PPID` row - the app intentionally reports an error rather than silently producing an empty result. Double-check that you copied the full range, including the header row, from **"EXPORT_ALL_TABLE_%%.xls"**.
 
 ### Add Description fails
 

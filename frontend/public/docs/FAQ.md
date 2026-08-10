@@ -1,16 +1,29 @@
 # Frequently Asked Questions
 
+## Can I upload an Excel file?
+
+No. V1.13 uses Clipboard Paste as the only supported Conversion Input method. Open the RCC Excel file, select the entire data with Ctrl+A, copy it with Ctrl+C, and paste it into the web application.
+
+## Can I drag and drop the Excel file?
+
+No. Drag & Drop is not supported. Please use Clipboard Paste.
+
 ## What data should I use?
 
-Data downloaded from RCC. Copy it directly from the downloaded file and paste it into RCC Excel Automation - see the [User Guide's Input Data section](./USER_GUIDE.md#input-data) for the exact steps.
+Data downloaded from RCC. Copy it directly from the downloaded file and paste it into RCC Excel Automation - see the [User Guide's Basic Workflow section](./USER_GUIDE.md#2-basic-workflow) for the exact steps.
 
 ## How do I use RCC-exported data?
 
-Download it from RCC, open it, copy the range you need (including the header row), then paste it into the **Paste** panel on the Home screen with Ctrl+V. You don't need to reformat or re-template anything first.
+Save the RCC Excel data using **"All Export to Excel"**, open **"EXPORT_ALL_TABLE_%%.xls"**, copy the entire sheet (Ctrl+A, then Ctrl+C), then paste it into the Conversion Input area on the Home screen with Ctrl+V. You don't need to reformat or re-template anything first.
 
-## What should I do if Clipboard Paste doesn't work?
+## What should I do if my pasted data does not look correct?
 
-Open the downloaded file in Excel, press **Ctrl+A** to select everything, **Ctrl+C** to copy, then return to RCC Excel Automation and paste again. This resolves the most common paste issues. If it still doesn't work, you can also use **File Upload** or **Drag & Drop** instead.
+1. Open the RCC Excel file.
+2. Select the entire sheet with **Ctrl+A**.
+3. Copy with **Ctrl+C**.
+4. Paste directly into the Conversion Input area.
+
+This resolves the most common paste issues - re-copying the full sheet, rather than a partial selection, is usually the fix.
 
 ## What is Preview Rows?
 

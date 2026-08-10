@@ -11,39 +11,39 @@ file, without needing to write a script or perform the reshaping by hand.
 
 ## 2. Basic Workflow
 
-The complete workflow, start to finish:
+**Clipboard Paste is the only supported way to bring data into RCC Excel Automation** (V1.13) - the
+complete workflow, start to finish:
 
-```
-Get the data from RCC → Input the data → Convert → Preview → Export the result
-```
-
-1. **Get the data from RCC** - download or copy your data from RCC as usual.
-2. **Input the data** - upload the file, drag & drop it, or paste it directly into RCC Excel
-   Automation.
-3. **Convert** - click Convert and the app reshapes the data locally.
-4. **Preview** - review the result in the grid before doing anything else with it.
-5. **Export the result** - save the finished file with Quick Save or Save As.
+1. Save the RCC Excel data using **"All Export to Excel"**.
+2. Open the file **"EXPORT_ALL_TABLE_%%.xls"**.
+3. Press **Ctrl+A**.
+4. Press **Ctrl+C**.
+5. Paste the data into the Conversion Input area (Ctrl+V) on the Home screen.
+6. Click **Convert**.
+7. Review the converted result in the Preview grid.
+8. Export the result if required (Quick Save or Save As).
 
 ## 3. Conversion Input
 
-**Use the file downloaded directly from RCC whenever possible** - there's no need to reformat it
-or build a special template first; if it already has the shape RCC exports, it converts correctly.
+**Clipboard Paste is the only supported Conversion Input method.** There is no file upload or
+drag & drop control on the Home screen - pasting is the entire input step, and there's nothing to
+reformat first: if your clipboard data already has the shape RCC exports, it converts correctly.
 
-### Supported input methods
+1. Copy your data from Excel (including the header row) with **Ctrl+C**.
+2. Click into the Paste area on the Home screen.
+3. Press **Ctrl+V**.
 
-- **File Upload** - click the Upload panel on the Home screen to browse for a file.
-- **Drag & Drop** - drag the file directly onto the Upload panel.
-- **Clipboard Paste** - copy a range out of Excel (including the header row) and paste it into the
-  Paste panel with Ctrl+V.
+### Clipboard Troubleshooting
 
-### If Clipboard Paste doesn't work as expected
+If pasting doesn't seem to pick up your data:
 
-1. Open the Excel file you downloaded from RCC.
-2. Press **Ctrl+A** to select the entire data.
-3. Press **Ctrl+C**.
-4. Return to RCC Excel Automation and paste it into the Paste panel.
+1. Open the downloaded Excel file.
+2. Press **Ctrl+A** to select the entire sheet.
+3. Press **Ctrl+C** to copy it.
+4. Return to the web application and paste it into the Conversion Input area.
 
-This full-select-and-copy approach resolves the most common paste issues.
+Do not try to upload the file - Upload and Drag & Drop are intentionally not available in V1.13;
+Clipboard Paste is the only way to bring data in.
 
 ## 4. Transformation Rule
 
@@ -156,7 +156,8 @@ download, including the header row. If the input doesn't contain any recognizabl
 empty result.
 
 **Clipboard paste failure** - use the Ctrl+A / Ctrl+C fallback described in
-[Conversion Input](#3-conversion-input), or use File Upload / Drag & Drop instead.
+[Conversion Input](#3-conversion-input). File Upload and Drag & Drop are not available in V1.13 -
+Clipboard Paste is the only supported way to bring data in.
 
 **Add Description mismatch** - confirm your Description data has a `PPID` column and a `DESC` (or
 `Description`) column, matched by name. A "duplicate PPID" error means the same PPID appears more
