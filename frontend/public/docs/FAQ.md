@@ -47,7 +47,7 @@ Open **Settings → Show Advanced Features**, click **Transformation Rules**, th
 
 ## How do I use Add Description?
 
-Click **Add Description** in the toolbar after converting, then provide a file with `PPID` and `DESC` columns via Upload, Drag & Drop, or Clipboard Paste - all three work identically. See the [User Guide's Add Description section](./USER_GUIDE.md#add-description) for details.
+Click **Add Description** in the toolbar after converting, then paste data with `PPID` and `DESC` columns directly from Excel - Clipboard Paste is the only supported way to provide it, the same as Conversion Input. See the [User Guide's Add Description section](./USER_GUIDE.md#add-description) for details.
 
 ## What happens with duplicate PPIDs?
 

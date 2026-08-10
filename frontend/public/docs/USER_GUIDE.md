@@ -67,14 +67,9 @@ The Preview grid updates instantly as you edit a rule.
 Add Description merges a `DESC` column onto your converted data by matching `PPID`, so you don't
 have to do a manual VLOOKUP/XLOOKUP afterward.
 
-Click **Add Description** in the toolbar once you have a conversion result, then provide your
-Description data (a `PPID` column and a `DESC` or `Description` column) using any of:
-
-- **File Upload**
-- **Drag & Drop**
-- **Clipboard Paste**
-
-All three produce identical results for the same data.
+Click **Add Description** in the toolbar once you have a conversion result, then paste your
+Description data (a `PPID` column and a `DESC` or `Description` column) directly from Excel -
+**Clipboard Paste is the only supported way to provide it**, the same as Conversion Input.
 
 - **PPID-based matching**: every converted row whose `PPID` matches a row in your Description data
   receives that `DESC` value. Rows sharing the same `PPID` all receive the same `DESC`.
@@ -85,9 +80,9 @@ All three produce identical results for the same data.
 
 ### How to clear/remove incorrect input
 
-If you selected the wrong file or pasted the wrong data - either on the Home screen or in Add
-Description - click **Remove** (next to a selected file) or **Clear** (next to a pasted-data
-summary) to discard it and start over, without needing to convert or close the dialog first.
+If you pasted the wrong data - either on the Home screen or in Add Description - click **Clear**
+(next to a pasted-data summary) to discard it and start over, without needing to convert or close
+the dialog first.
 
 ## 6. Preview and Review
 

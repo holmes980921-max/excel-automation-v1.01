@@ -26,8 +26,9 @@ Re-copying the full sheet, rather than a partial selection, resolves the most co
 
 ### I tried to upload a file / drag and drop a file
 
-File Upload and Drag & Drop are intentionally not supported in V1.13. Clipboard Paste is the only
-supported Conversion Input method - see [Paste does not contain the expected data](#paste-does-not-contain-the-expected-data)
+File Upload and Drag & Drop are intentionally not supported in V1.13 - this applies to both
+Conversion Input and Add Description. Clipboard Paste is the only supported way to bring data in
+for either - see [Paste does not contain the expected data](#paste-does-not-contain-the-expected-data)
 above for the copy/paste steps.
 
 ### Conversion fails after paste
