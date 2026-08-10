@@ -12,6 +12,7 @@ import ExcelGrid from "@/components/ExcelGrid";
 import AboutDialog from "@/components/AboutDialog";
 import ReleaseNotesDialog from "@/components/ReleaseNotesDialog";
 import HelpSupportDialog from "@/components/HelpSupportDialog";
+import FilmMaterialVisualizationDialog from "@/components/FilmMaterialVisualizationDialog";
 import HomeScreen from "@/components/HomeScreen";
 import ReturnHomeDialog from "@/components/ReturnHomeDialog";
 import AddDescriptionDialog from "@/components/AddDescriptionDialog";
@@ -56,6 +57,9 @@ export default function Home() {
   const [aboutOpen, setAboutOpen] = useState(false);
   const [releaseNotesOpen, setReleaseNotesOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  // V1.12: the raw filmmaterial value the user clicked, or null when the
+  // Visualization modal should be closed - see FilmMaterialVisualizationDialog.
+  const [filmMaterialValue, setFilmMaterialValue] = useState<string | null>(null);
   const [homeConfirmOpen, setHomeConfirmOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(true);
   // Hidden by default (V1.05: "simplify the interface for everyday users
@@ -347,7 +351,12 @@ export default function Home() {
             )}
 
             <Box sx={{ flex: 1, minWidth: 0, p: 1.5, background: "#FDF8F0" }}>
-              <ExcelGrid rows={previewRows} rule={draft} extraColumns={extraColumns} />
+              <ExcelGrid
+                rows={previewRows}
+                rule={draft}
+                extraColumns={extraColumns}
+                onFilmMaterialClick={setFilmMaterialValue}
+              />
             </Box>
           </>
         ) : (
@@ -392,6 +401,7 @@ export default function Home() {
       <AboutDialog open={aboutOpen} onClose={() => setAboutOpen(false)} />
       <ReleaseNotesDialog open={releaseNotesOpen} onClose={() => setReleaseNotesOpen(false)} />
       <HelpSupportDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <FilmMaterialVisualizationDialog value={filmMaterialValue} onClose={() => setFilmMaterialValue(null)} />
     </Box>
   );
 }
