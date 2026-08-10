@@ -9,7 +9,9 @@ describe("buildErrorLogEntry", () => {
     expect(entry.message).toBe("boom");
     expect(entry.operation).toBe("UI Rendering");
     expect(entry.stack).toContain("boom");
-    expect(entry.appVersion).toMatch(/^\d+\.\d+\.\d+ \(v\d+\.\d+\)$/);
+    // GIT_TAG is normally "vX.Y" but a patch release (e.g. "v1.13.1") is a
+    // legitimate format too - allow an optional third segment.
+    expect(entry.appVersion).toMatch(/^\d+\.\d+\.\d+ \(v\d+\.\d+(\.\d+)?\)$/);
     expect(new Date(entry.timestamp).toString()).not.toBe("Invalid Date");
   });
 
