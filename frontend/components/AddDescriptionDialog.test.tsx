@@ -46,6 +46,19 @@ describe("AddDescriptionDialog", () => {
     vi.mocked(addDescriptionFromClipboard).mockReset();
   });
 
+  it("shows the example PPID/DESC format guide (V1.13)", () => {
+    render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
+    expect(screen.getByText(/example format/i)).toBeInTheDocument();
+    expect(screen.getByText(/PPID1/)).toBeInTheDocument();
+    expect(screen.getByText(/DESC1/)).toBeInTheDocument();
+  });
+
+  it("still supports Upload/Drag & Drop alongside Clipboard Paste (V1.13 scope: unchanged)", () => {
+    render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
+    expect(document.body.querySelector('input[type="file"]')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/paste ppid\/desc data/i)).toBeInTheDocument();
+  });
+
   it("Add Description stays disabled until a file is selected", () => {
     render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
     expect(screen.getByRole("button", { name: /^add description$/i })).toBeDisabled();

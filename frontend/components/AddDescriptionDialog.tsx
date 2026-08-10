@@ -173,11 +173,33 @@ export default function AddDescriptionDialog({ open, onClose, baseRows, onMerged
       <DialogContent sx={{ position: "relative" }}>
         <ProcessingOverlay open={loading} fileSizeMB={file ? file.size / (1024 * 1024) : undefined} />
 
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
           Provide a Description lookup with PPID and DESC columns - upload a file, drag & drop, or paste
           directly from Excel. DESC is added to every converted row whose PPID matches - rows with no
           match are left as is.
         </Typography>
+
+        {/* V1.13: a light, concise example so a first-time user immediately
+         * sees the expected two-column shape - PPID is the key, DESC is the
+         * value, and multiple rows can be pasted at once. */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="caption" color="text.disabled">
+            We provide the example format.
+          </Typography>
+          <Box
+            component="pre"
+            sx={{
+              m: 0,
+              mt: 0.5,
+              fontFamily: "monospace",
+              fontSize: 12,
+              color: "text.disabled",
+              lineHeight: 1.6,
+            }}
+          >
+            {"PPID    |    DESC\nPPID1   |    DESC1\nPPID2   |    DESC2\nPPID3   |    DESC3"}
+          </Box>
+        </Box>
 
         <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
           <Box sx={{ flex: "1 1 220px" }}>
