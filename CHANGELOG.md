@@ -3,6 +3,53 @@
 > Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
 > below for earlier versions use the name in effect at the time.
 
+## v1.13 - Clipboard-Only Input UX & Documentation Update
+
+### Release Notes
+
+V1.13 is a UX/documentation release - no conversion, Add Description, Error Details, Film Material
+Visualization, or Material DB logic changed. It standardizes the Home screen's Conversion Input on
+a single method, Clipboard Paste, removing Upload and Drag & Drop so there's only one workflow to
+learn and document; the initial screen and the paste area's placeholder both spell out the same
+4-step "All Export to Excel" -> `EXPORT_ALL_TABLE_%%.xls` -> Ctrl+A/Ctrl+C -> Paste workflow. Add
+Description is unchanged and keeps all three of its existing input methods (Upload, Drag & Drop,
+Clipboard Paste) - it gained only a light example-format guide, no new input controls. Help &
+Support's User Guide/FAQ/Troubleshooting were rewritten to consistently describe the clipboard-only
+workflow. Film Material Visualization gained a subtle hover affordance (underline + slight color
+shift) for discoverability; its click behavior, parsing, and modal content are otherwise unchanged.
+Full detail: [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md).
+
+### Changed
+- **Conversion Input is now Clipboard Paste only** (`HomeScreen.tsx`) - Upload and Drag & Drop
+  (`react-dropzone`, the file-selection state/UI, `convertFile`) were removed from the Home screen
+  entirely; the old two-panel Upload/Paste layout collapsed to a single Paste panel.
+- **Initial screen guidance** - a numbered 4-step guide (same wording as the placeholder) is shown
+  directly on the Home screen, not just inside the paste area.
+- **Paste area placeholder** - light/subdued placeholder text repeating the same 4 steps, using the
+  exact product names `"All Export to Excel"` and `"EXPORT_ALL_TABLE_%%.xls"`; disappears naturally
+  once the user pastes.
+- **Add Description** (`AddDescriptionDialog.tsx`) - added a light "We provide the example format."
+  guide with a sample `PPID | DESC` table above the existing (unchanged) Upload/Drag & Drop/Paste
+  controls.
+- **Film Material hover affordance** (`ExcelGrid.tsx`, `globals.css`) - a `film-material-cell` CSS
+  class now applies a subtle underline + color-shift transition on hover to clickable filmmaterial
+  cells; normal (non-hovered) appearance is unchanged plain table text, and it's still a click on
+  the cell itself, not a separate button.
+- **`USER_GUIDE.md`, `FAQ.md`, `TROUBLESHOOTING.md`** rewritten to describe the clipboard-only
+  Conversion Input workflow, with explicit "upload/drag & drop isn't supported" guidance and
+  Ctrl+A/Ctrl+C/paste troubleshooting steps; Add Description's own documentation (still 3 methods)
+  was left untouched.
+
+### Fixed
+- A missing/placeholder filmmaterial value (`"-"`) was incorrectly treated as clickable (pointer
+  cursor, and now hover-affordance) due to a pre-existing V1.12 truthy-string check that didn't
+  exclude it - fixed via a shared `isClickableFilmMaterialValue` helper now used consistently by
+  both the cursor/hover styling and the click handler.
+
+### Known limitations (disclosed, not fixed this version)
+- No live-browser interactive verification in this environment (no browser automation tool
+  available) - covered instead by component tests (RTL/jsdom) and a local dev-server boot check.
+
 ## v1.12 - Film Material Visualization
 
 ### Release Notes

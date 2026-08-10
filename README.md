@@ -23,8 +23,8 @@ team's internal server access is still ~1 month out, ahead of a planned V2.0 Ser
 - See [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for the full migration writeup, behavioral-
   parity regression results against the V1.09 Python engine, and known limitations.
 
-**Current version: V1.12 - Film Material Visualization** (see the in-app **About** dialog for live
-version/build info)
+**Current version: V1.13 - Clipboard-Only Input UX & Documentation Update** (see the in-app
+**About** dialog for live version/build info)
 
 ## Quick Start
 
@@ -46,6 +46,25 @@ case you need to compare behavior against it (V1.10's regression suite already d
 automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 
 ## Features
+
+### Clipboard-Only Input UX & Documentation Update (V1.13)
+- **Clipboard Paste is now the only Conversion Input method on the Home screen.** Upload and
+  Drag & Drop were removed entirely (no misleading upload controls left visible) - the workflow is
+  RCC's **"All Export to Excel"** -> open **"EXPORT_ALL_TABLE_%%.xls"** -> **Ctrl+A** -> **Ctrl+C**
+  -> paste -> **Convert**. Add Description is unaffected and still supports all three of its
+  existing input methods (Upload, Drag & Drop, Clipboard Paste).
+- **The same 4-step workflow is shown directly on the initial screen**, and again as a light,
+  subdued placeholder inside the paste area (using the exact product names above) that disappears
+  naturally once you paste.
+- **Add Description now shows a light example-format guide** ("We provide the example format." + a
+  sample `PPID | DESC` table) above its existing input controls - no new input method was added.
+- **User Guide, FAQ, and Troubleshooting rewritten** to consistently describe the clipboard-only
+  workflow, including explicit "upload/drag & drop isn't supported" guidance.
+- **Film Material cells gained a hover affordance** (subtle underline + color shift) for
+  discoverability - click behavior, parsing, and the visualization modal itself are unchanged from
+  V1.12.
+- No conversion, Add Description, Error Details, Film Material Visualization, or Material DB logic
+  changed this version. See [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) for the full assessment.
 
 ### Film Material Visualization (V1.12)
 - **Click a `filmmaterial` value in the result table** to see its layer structure visualized
@@ -193,8 +212,9 @@ automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 - **Status Bar** now shows Description match/unmatch counts once Add Description has run.
 
 ### Core conversion (V1.01+)
-- **File upload or clipboard paste** - drag & drop / choose a file, or copy a range out of Excel
-  (including the header row) and paste it directly.
+- **Clipboard paste** - copy a range out of Excel (including the header row) and paste it directly
+  into the Conversion Input area. (V1.01-V1.12 also offered file Upload/Drag & Drop for this; V1.13
+  standardized Conversion Input on Clipboard Paste only - see [Features](#features) above.)
 - **Flexible input columns** - production files can carry extra columns; only `PPID` /
   `Parameter` / `Reference Value` are read (located by header name, with a positional fallback),
   everything else is ignored.
@@ -265,14 +285,14 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Frontend (Vitest, 225 tests) - the only test suite that matters for this branch
+# Frontend (Vitest, 237 tests) - the only test suite that matters for this branch
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
 npm run lint
 npx tsc --noEmit
 ```
 
-Included in those 150: a dedicated `lib/converter/regression.test.ts` that loads real fixture
+Included in those 237: a dedicated `lib/converter/regression.test.ts` that loads real fixture
 files and compares the JS engine's output field-for-field against a JSON snapshot produced by the
 actual Python V1.09 engine - see [Architecture](#architecture) and
 [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for how this is generated/verified.
@@ -303,14 +323,16 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
 
 ## Home Screen Guide
 
-1. Launch the app - you land directly on the **Home** screen (no Upload click needed).
-2. Either **drag & drop** a `.xls`/`.xlsx`/`.xlsm` file onto the Upload panel (or click it to
-   browse), or click into the Paste panel and **Ctrl+V** a range copied from Excel. Using one
-   clears the other, so there's never ambiguity about which input Convert will use. A large paste
-   (~200,000+ rows) shows a "Clipboard Loaded" summary instead of the raw text - see
-   [Troubleshooting](#troubleshooting).
-3. Selected the wrong file, or pasted the wrong range? Click **Remove** (Upload) or **Clear**
-   (Paste) to discard it and start over, without needing to convert or navigate away first.
+1. Launch the app - you land directly on the **Home** screen, which shows the 4-step workflow
+   below.
+2. Save the RCC Excel data using **"All Export to Excel"**, open **"EXPORT_ALL_TABLE_%%.xls"**,
+   select everything with **Ctrl+A**, and copy it with **Ctrl+C** (per V1.13, **Clipboard Paste is
+   the only supported Conversion Input method** - there is no Upload or Drag & Drop control on the
+   Home screen).
+3. Click into the paste area and press **Ctrl+V**. A large paste (~200,000+ rows) shows a
+   "Clipboard Loaded" summary instead of the raw text - see [Troubleshooting](#troubleshooting).
+   Pasted the wrong data? Click **Clear** to discard it and start over, without needing to convert
+   first.
 4. Click **Convert**. A processing overlay shows progress; click **Abort** if you need to cancel
    (a confirmation appears before anything is actually discarded).
 5. Once converted, you're on the Preview screen - the toolbar now shows Quick Save/Save As/Add
@@ -496,11 +518,13 @@ Read the error in that window - it's the actual uvicorn/Next.js output. Common c
 or 3000 already in use by another process (close it, or stop the other process), or a corrupted
 `node_modules`/`.venv` (delete the folder and run `update.bat`).
 
-**Upload says "isn't a supported file type."**
-Only `.xls`, `.xlsx`, and `.xlsm` are accepted. If your file genuinely is one of these but still
-gets rejected, it may be corrupted or password-protected - the app detects format from file
-contents, not the extension, so a real format problem will surface as a clear "Could not read
-uploaded file" error after upload rather than a silent failure.
+**Upload says "isn't a supported file type." (Add Description only)**
+The Home screen's Conversion Input has no Upload control as of V1.13 (Clipboard Paste only) - this
+message can only come from **Add Description**'s file picker, which still accepts `.xls`, `.xlsx`,
+and `.xlsm`. If your file genuinely is one of these but still gets rejected, it may be corrupted or
+password-protected - the app detects format from file contents, not the extension, so a real format
+problem will surface as a clear "Could not read uploaded file" error after upload rather than a
+silent failure.
 
 **Nothing happens after clicking Convert / the grid stays empty.**
 Check the backend window for a Python traceback, and confirm `scripts\health-check.ps1` reports
@@ -513,10 +537,12 @@ This was root-caused and fixed in V1.04 (MUI's `AppRouterCacheProvider` + a stab
 id). If you still see one, please report it with the exact message - it would indicate a
 regression, not an expected/ignorable warning.
 
-**Upload says "File is too large."**
+**Upload says "File is too large." (Add Description only)**
 Files over 250 MB are rejected before any parsing is attempted (V1.05 reliability hardening,
 prevents an unbounded-memory request). This app's target scale is ~300k rows, which is typically
-well under this limit - if you're hitting it, double check the file is what you think it is.
+well under this limit - if you're hitting it, double check the file is what you think it is. Since
+V1.13, this can only apply to Add Description's file picker - the Home screen's Conversion Input is
+Clipboard Paste only and has no file size to reject.
 
 **I can't find the Transformation Rules button.**
 It's hidden by default in V1.05 - see step 0 of the [Rule Editor Guide](#rule-editor-guide).
@@ -534,10 +560,10 @@ ignored. At this app's target scale (sub-2s conversions, per the V1.05 benchmark
 user-visible; a real server-side cancellation mechanism remains a disclosed future item (see
 [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md)'s Future Improvements).
 
-**I accidentally selected the wrong file or pasted the wrong data.**
-Click **Remove** (next to the selected file) or **Clear** (next to the Clipboard Loaded summary)
-to discard it before converting - see step 3 of the [Home Screen Guide](#home-screen-guide). The
-same applies to the Description file in the Add Description dialog.
+**I pasted the wrong data, or selected the wrong Description file.**
+On the Home screen, click **Clear** (next to the Clipboard Loaded summary) to discard a paste
+before converting - see step 3 of the [Home Screen Guide](#home-screen-guide). In the Add
+Description dialog, the same **Remove**/**Clear** affordances exist for its file/paste input.
 
 **Clicking Home doesn't seem to fully reset things.**
 This was a real bug, fixed in V1.09 - Home now resets the uploaded file/pasted data, preview,
@@ -590,6 +616,7 @@ excel-automation-v1.01/
 ├── CODE_REVIEW_V1.10.md            # V1.10 review + score (Browser Edition migration, JS/Python parity regression)
 ├── CODE_REVIEW_V1.11.md            # V1.11 review + score (Help & Support, Error Details privacy gating)
 ├── CODE_REVIEW_V1.12.md            # V1.12 review + score (Film Material Visualization, Longest Match First parsing)
+├── CODE_REVIEW_V1.13.md            # V1.13 review + score (Clipboard-only input UX, docs update, Film Material hover)
 ├── backend/                        # Preserved V1.09 Python/FastAPI implementation - not used by this branch's
 │                                    # running app; kept only as the source of truth for the regression fixtures
 │                                    # in frontend/lib/converter/__fixtures__/ (see Architecture above)
@@ -633,7 +660,7 @@ excel-automation-v1.01/
     │   ├── WorkflowBadges.tsx         # V1.07: Converted / Description Applied / Ready to Save status strip
     │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA, Abort
     │   ├── AboutDialog.tsx            # App name/version/git tag/build date/edition
-    │   ├── HomeScreen.tsx             # Application entry point - drag & drop / paste / Convert; V1.11: Show Details on failure
+    │   ├── HomeScreen.tsx             # Application entry point - Clipboard Paste (only, V1.13) / Convert; V1.11: Show Details on failure
     │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID; V1.11: Show Details on failure
     │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
     │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
@@ -679,7 +706,7 @@ excel-automation-v1.01/
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
     ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
     ├── next.config.mjs                # V1.10: output: "export" + basePath for GitHub Pages; V1.11: NEXT_PUBLIC_BASE_PATH for docsLoader.ts
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 225 tests
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 237 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -745,13 +772,21 @@ concerns independent and separately testable.
   privacy gate that withholds it for validation errors whose message already reflects the user's
   own data. No conversion logic changed. See [CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md) and
   [CHANGELOG.md](./CHANGELOG.md).
-- **V1.12 (this branch)** - Film Material Visualization: click a `filmmaterial` value to see its
+- **V1.12** - Film Material Visualization: click a `filmmaterial` value to see its
   layer structure TOP to BOTTOM, colored per an administrator-editable
   [`material-db.csv`](./frontend/public/data/material-db.csv) with automatic black/white text
   contrast. Parsing uses Longest Match First against the Material DB, correctly tokenizing
   multi-character Material Codes; an unrecognized code shows a clear error instead of an incorrect
   diagram. Fully isolated from Excel conversion - a Material DB problem disables Visualization
   only. See [CODE_REVIEW_V1.12.md](./CODE_REVIEW_V1.12.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.13 (this branch)** - Clipboard-Only Input UX & Documentation Update: Conversion Input on the
+  Home screen is now Clipboard Paste only (Upload/Drag & Drop removed, no misleading controls left
+  behind); the initial screen and paste-area placeholder both show the 4-step RCC workflow with the
+  exact product names; Add Description gained a light example-format guide (its 3 existing input
+  methods are unchanged); User Guide/FAQ/Troubleshooting rewritten for the clipboard-only workflow;
+  Film Material cells gained a subtle hover affordance. No conversion, Add Description, Error
+  Details, Film Material Visualization, or Material DB logic changed. See
+  [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -832,3 +867,17 @@ already-converted row's `FilmMaterial` value on click, via new, entirely separat
 that the grid doesn't throw or behave differently without it) and `app/page.tsx` (new dialog state,
 additive). The full pre-V1.12 test suite (180 tests) passes unmodified; Excel conversion, Add
 Description, and Help & Support were all re-verified working after this version's changes.
+
+**V1.13 (Clipboard-Only Input UX & Documentation Update)**: `frontend/lib/converter/` (the
+conversion/rule/merge engine), `materialDb.ts`, `filmMaterialParser.ts`, and `cssColor.ts` were not
+touched this version - the only functional code change is `HomeScreen.tsx` losing its
+Upload/Drag & Drop code path (`lib/api.ts`'s `convertFile` is no longer called by any UI component
+as a result, though it's left in place rather than deleted - the underlying worker/engine file-read
+path it wraps is unrelated to the removed UI and not itself part of this version's scope) and
+`ExcelGrid.tsx`
+gaining a shared `isClickableFilmMaterialValue` helper that also fixes a pre-existing V1.12 edge
+case (a missing-value `"-"` was incorrectly treated as clickable). The pre-V1.13 suite (225 tests)
+passes unmodified in substance - the handful of tests that changed are the ones that directly
+asserted the now-removed Upload/Drag & Drop UI, replaced with equivalent "not present" assertions;
+no test covering Excel conversion, Add Description, Error Details, Film Material Visualization, or
+Material DB was altered or removed. 12 tests were added net, for a total of 237.

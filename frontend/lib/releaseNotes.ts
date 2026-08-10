@@ -20,6 +20,24 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "V1.13",
+    date: "2026-08-11",
+    title: "Clipboard-Only Input UX & Documentation Update",
+    new: [
+      "Initial screen now shows the 4-step \"All Export to Excel\" -> \"EXPORT_ALL_TABLE_%%.xls\" -> Ctrl+A/Ctrl+C -> Paste workflow directly, plus a matching light placeholder in the paste area",
+      "Add Description shows a light example PPID | DESC format guide",
+      "Film Material values now show a subtle underline/color hover affordance so it's clearer they're clickable",
+    ],
+    improved: [
+      "Conversion Input is now Clipboard Paste only - Upload and Drag & Drop were removed from the Home screen to standardize on one workflow (Add Description keeps all 3 input methods, unchanged)",
+      "User Guide, FAQ, and Troubleshooting rewritten to consistently describe the clipboard-only workflow, with explicit \"upload isn't supported\" guidance",
+    ],
+    fixed: [
+      "A missing filmmaterial value (\"-\") was incorrectly treated as clickable/hoverable, a pre-existing edge case from V1.12",
+    ],
+    knownIssues: [],
+  },
+  {
     version: "V1.12",
     date: "2026-08-10",
     title: "Film Material Visualization",
