@@ -206,3 +206,58 @@ named in every prior version's review.
   still the single highest-value addition for closing this project's recurring "no live browser"
   verification gap, and would directly cover this version's placeholder-disappears-on-paste and
   hover-affordance behavior in an actual browser rather than jsdom).
+
+## Addendum: V1.13.1 Follow-up Fix
+
+A follow-up spec identified two things this review's V1.13 assessment had accepted as in-scope
+decisions but that the user's actual intent required to go further:
+
+1. **The page-level "How to get your data" guide duplicated the paste-area placeholder** - both
+   showed the identical 4-step instructions, which is redundant UI. Removed the guide block
+   entirely (`HomeScreen.tsx`); the placeholder is unchanged.
+2. **Add Description needed to become Clipboard Paste only, not just gain a guide.** This review's
+   Section 2/9 called the "Add Description keeps its existing three input methods" reading "the
+   correct reading given the spec's own explicit regression-safety list" - a defensible
+   interpretation of V1.13's literal wording ("don't add a file picker or Drag & Drop *to* Add
+   Description" reads naturally as "don't add new ones"), but not what the user actually wanted.
+   The follow-up spec made the intent explicit: "V1.13 officially uses Clipboard Paste as the only
+   input method for both Conversion Input and Add Description." Fixed by removing
+   `AddDescriptionDialog.tsx`'s Upload/Drag & Drop code path (`react-dropzone`, file state, the
+   file-based `addDescription` call) and moving its example format into the paste area's
+   placeholder, mirroring Conversion Input's pattern exactly.
+
+**Regression re-confirmed**: `frontend/lib/converter/`, `materialDb.ts`, `filmMaterialParser.ts`,
+and `cssColor.ts` remain untouched. `addDescriptionFromClipboard` - Add Description's actual
+PPID-matching/merge logic - was not touched; only the UI's *input method* changed. Full suite: 237
+tests, all passing (same total as V1.13; composition shifted as tests for the removed UI were
+replaced with equivalent "not present"/placeholder tests - see the updated README backward-
+compatibility section for the itemized breakdown). One incidental, disclosed test fix unrelated to
+this version's actual changes: `errorLog.test.ts`'s `appVersion` regex assumed a two-segment
+`vX.Y` git tag and needed broadening for the three-segment `v1.13.1` patch tag - the assertion's
+intent (a well-formed version string) is unchanged. `tsc --noEmit` and `eslint .` both clean.
+
+**What was not verified this round**: `next build` reproduces the same pre-existing, disclosed
+Windows-only `EISDIR` bug (unrelated to any application code, documented since V1.03) - unchanged
+from every prior version, verified instead through GitHub Actions' Linux CI runner. The local
+dev-server smoke-boot check could not be completed this session - three separate attempts (with
+proper node.exe/`.next` cleanup between each) had the background dev-server process exit on its own
+shortly after reporting "Ready," before a request could be served, despite no application error
+appearing in its own output. This reads as an environment-level condition specific to this session
+(not reproducible via the application code, and not the same failure mode as the already-documented
+`.next/trace` `EPERM` lock) rather than a regression - disclosed plainly rather than silently
+skipped or claimed as verified. Deployment verification (the real production build, via GitHub
+Actions, plus live-site bundle inspection) still applies as the authoritative check, per this
+project's established practice.
+
+**New technical debt, disclosed**: with Add Description's Upload/Drag & Drop removed too,
+`lib/uploadValidation.ts` (`ACCEPTED_FILE_TYPES`/`describeRejection`) is now unreferenced by any
+component (only its own test file still imports it), and `react-dropzone` is now an unused
+`package.json` dependency. Left in place for the same reason as `convertFile` in Section 8 -
+removing them is a larger cleanup than this fix's mandate, but both are now confirmed fully dead
+code, worth removing in a future version rather than carrying forward indefinitely.
+
+**Grade held at A.** The fixes are narrowly scoped exactly as directed, don't touch business logic,
+and the one place this version's own prior judgment call was wrong is stated plainly rather than
+glossed over - but a live UX decision requiring a user follow-up to correct, twice now across
+V1.11's basePath incident and this one, keeps this project shy of A+ on "gets it right without a
+second pass."

@@ -3,6 +3,36 @@
 > Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
 > below for earlier versions use the name in effect at the time.
 
+## v1.13.1 - Clipboard-Only Input UX Follow-up Fix
+
+### Release Notes
+
+V1.13.1 finalizes V1.13's clipboard-only mandate after a follow-up review found two remaining
+inconsistencies: the Home screen showed the same RCC workflow instructions twice (a page-level
+guide block and the paste-area placeholder), and Add Description still offered Upload/Drag & Drop
+even though Conversion Input had already moved to Clipboard Paste only. Both are fixed here. No
+conversion logic, Error Details, Film Material Visualization, or Material DB behavior changed -
+Add Description's PPID-matching behavior is identical, only its *input method* changed.
+
+### Changed
+- **Removed the redundant "How to get your data" guide** from the Home screen (`HomeScreen.tsx`) -
+  the identical 4-step workflow already lives in the paste area's placeholder, so showing it twice
+  was redundant UI. The placeholder itself is unchanged.
+- **Add Description is now Clipboard Paste only** (`AddDescriptionDialog.tsx`) - Upload and
+  Drag & Drop (`react-dropzone`, the file-selection state/UI, the `addDescription` file-based call)
+  were removed, matching Conversion Input's V1.13 standardization. The dialog's description text
+  was rewritten to no longer mention Upload or Drag & Drop.
+- **Add Description's example format moved into its paste area's placeholder** (`PPID | DESC`
+  example, light/subdued, disappears on paste) instead of a separate permanent block above the
+  input - the same pattern V1.13 already established for Conversion Input.
+
+### Known limitations (disclosed, not fixed this version)
+- No live-browser interactive verification in this environment (no browser automation tool
+  available) - covered instead by component tests (RTL/jsdom) and a local dev-server boot check.
+- `next build` still fails locally with the same pre-existing, disclosed Windows-only `EISDIR` bug
+  documented since V1.03 (unrelated to any application code) - production build verification relies
+  on GitHub Actions' Linux CI runner, as in every prior version.
+
 ## v1.13 - Clipboard-Only Input UX & Documentation Update
 
 ### Release Notes

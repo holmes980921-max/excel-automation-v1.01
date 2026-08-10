@@ -20,6 +20,20 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "V1.13.1",
+    date: "2026-08-11",
+    title: "Clipboard-Only Input UX Follow-up Fix",
+    new: [
+      "Add Description's paste area now shows a light PPID | DESC example placeholder (moved out of a separate permanent block)",
+    ],
+    improved: [
+      "Add Description is now Clipboard Paste only, matching Conversion Input - Upload and Drag & Drop were removed",
+      "Removed the page-level \"How to get your data\" guide on the initial screen as redundant with the paste-area placeholder, which already shows the same steps",
+    ],
+    fixed: [],
+    knownIssues: [],
+  },
+  {
     version: "V1.13",
     date: "2026-08-11",
     title: "Clipboard-Only Input UX & Documentation Update",

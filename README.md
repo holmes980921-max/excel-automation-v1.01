@@ -47,24 +47,28 @@ automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 
 ## Features
 
-### Clipboard-Only Input UX & Documentation Update (V1.13)
-- **Clipboard Paste is now the only Conversion Input method on the Home screen.** Upload and
-  Drag & Drop were removed entirely (no misleading upload controls left visible) - the workflow is
-  RCC's **"All Export to Excel"** -> open **"EXPORT_ALL_TABLE_%%.xls"** -> **Ctrl+A** -> **Ctrl+C**
-  -> paste -> **Convert**. Add Description is unaffected and still supports all three of its
-  existing input methods (Upload, Drag & Drop, Clipboard Paste).
-- **The same 4-step workflow is shown directly on the initial screen**, and again as a light,
-  subdued placeholder inside the paste area (using the exact product names above) that disappears
-  naturally once you paste.
-- **Add Description now shows a light example-format guide** ("We provide the example format." + a
-  sample `PPID | DESC` table) above its existing input controls - no new input method was added.
+### Clipboard-Only Input UX & Documentation Update (V1.13, finalized in V1.13.1)
+- **Clipboard Paste is the only input method for both Conversion Input and Add Description** -
+  Upload and Drag & Drop were removed entirely from both surfaces (no misleading upload controls
+  left visible anywhere in the app). Conversion Input's workflow is RCC's
+  **"All Export to Excel"** -> open **"EXPORT_ALL_TABLE_%%.xls"** -> **Ctrl+A** -> **Ctrl+C** ->
+  paste -> **Convert**.
+- **Both paste areas show their instructions as a light, subdued placeholder only** - Conversion
+  Input's placeholder repeats the 4-step RCC workflow (exact product names); Add Description's
+  placeholder shows a `PPID | DESC` example. Both disappear naturally once you paste, and neither
+  example ever becomes part of the actual data. (V1.13.1: a separate "How to get your data" guide
+  block that duplicated the Conversion Input placeholder was removed as redundant, and Add
+  Description's example moved from a permanent block into its placeholder the same way.)
 - **User Guide, FAQ, and Troubleshooting rewritten** to consistently describe the clipboard-only
-  workflow, including explicit "upload/drag & drop isn't supported" guidance.
+  workflow for both Conversion Input and Add Description, including explicit "upload/drag & drop
+  isn't supported" guidance.
 - **Film Material cells gained a hover affordance** (subtle underline + color shift) for
   discoverability - click behavior, parsing, and the visualization modal itself are unchanged from
   V1.12.
-- No conversion, Add Description, Error Details, Film Material Visualization, or Material DB logic
-  changed this version. See [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) for the full assessment.
+- No conversion, Error Details, Film Material Visualization, or Material DB logic changed. Add
+  Description's PPID-matching behavior is unchanged - only its input method changed. See
+  [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) for the full assessment (V1.13.1 addendum
+  included).
 
 ### Film Material Visualization (V1.12)
 - **Click a `filmmaterial` value in the result table** to see its layer structure visualized
@@ -362,8 +366,10 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
 ## Add Description Guide
 
 1. After converting, click **Add Description** in the toolbar.
-2. Upload a Description excel file with a `PPID` column and a `DESC` (or `Description`) column.
-3. Every converted row whose `PPID` matches a row in the Description file gets that `DESC` value;
+2. Copy your Description data (a `PPID` column and a `DESC` or `Description` column) from Excel and
+   paste it into the dialog's Conversion Input area (**Ctrl+V**) - Clipboard Paste is the only
+   supported way to provide it, as of V1.13.1.
+3. Every converted row whose `PPID` matches a row in the Description data gets that `DESC` value;
    rows sharing a `PPID` all receive the same `DESC`. Unmatched rows are left as `-`.
 4. The grid immediately shows the new `DESC` column, and the Status Bar shows how many `PPID`s
    matched vs. didn't.
@@ -518,13 +524,9 @@ Read the error in that window - it's the actual uvicorn/Next.js output. Common c
 or 3000 already in use by another process (close it, or stop the other process), or a corrupted
 `node_modules`/`.venv` (delete the folder and run `update.bat`).
 
-**Upload says "isn't a supported file type." (Add Description only)**
-The Home screen's Conversion Input has no Upload control as of V1.13 (Clipboard Paste only) - this
-message can only come from **Add Description**'s file picker, which still accepts `.xls`, `.xlsx`,
-and `.xlsm`. If your file genuinely is one of these but still gets rejected, it may be corrupted or
-password-protected - the app detects format from file contents, not the extension, so a real format
-problem will surface as a clear "Could not read uploaded file" error after upload rather than a
-silent failure.
+**I don't see an Upload button anywhere.**
+Correct, as of V1.13.1 - neither Conversion Input nor Add Description has an Upload or Drag & Drop
+control. Clipboard Paste (Ctrl+V) is the only supported way to bring data into either.
 
 **Nothing happens after clicking Convert / the grid stays empty.**
 Check the backend window for a Python traceback, and confirm `scripts\health-check.ps1` reports
@@ -536,13 +538,6 @@ success.
 This was root-caused and fixed in V1.04 (MUI's `AppRouterCacheProvider` + a stable `DndContext`
 id). If you still see one, please report it with the exact message - it would indicate a
 regression, not an expected/ignorable warning.
-
-**Upload says "File is too large." (Add Description only)**
-Files over 250 MB are rejected before any parsing is attempted (V1.05 reliability hardening,
-prevents an unbounded-memory request). This app's target scale is ~300k rows, which is typically
-well under this limit - if you're hitting it, double check the file is what you think it is. Since
-V1.13, this can only apply to Add Description's file picker - the Home screen's Conversion Input is
-Clipboard Paste only and has no file size to reject.
 
 **I can't find the Transformation Rules button.**
 It's hidden by default in V1.05 - see step 0 of the [Rule Editor Guide](#rule-editor-guide).
@@ -560,10 +555,10 @@ ignored. At this app's target scale (sub-2s conversions, per the V1.05 benchmark
 user-visible; a real server-side cancellation mechanism remains a disclosed future item (see
 [CODE_REVIEW_V1.09.md](./CODE_REVIEW_V1.09.md)'s Future Improvements).
 
-**I pasted the wrong data, or selected the wrong Description file.**
-On the Home screen, click **Clear** (next to the Clipboard Loaded summary) to discard a paste
-before converting - see step 3 of the [Home Screen Guide](#home-screen-guide). In the Add
-Description dialog, the same **Remove**/**Clear** affordances exist for its file/paste input.
+**I pasted the wrong data.**
+Click **Clear** (next to the Clipboard Loaded summary) to discard a paste before converting/merging
+- see step 3 of the [Home Screen Guide](#home-screen-guide). The same **Clear** affordance exists
+in the Add Description dialog.
 
 **Clicking Home doesn't seem to fully reset things.**
 This was a real bug, fixed in V1.09 - Home now resets the uploaded file/pasted data, preview,
@@ -661,7 +656,7 @@ excel-automation-v1.01/
     │   ├── ProcessingOverlay.tsx      # Shown on Convert/Add Description: stage text, indeterminate progress, ETA, Abort
     │   ├── AboutDialog.tsx            # App name/version/git tag/build date/edition
     │   ├── HomeScreen.tsx             # Application entry point - Clipboard Paste (only, V1.13) / Convert; V1.11: Show Details on failure
-    │   ├── AddDescriptionDialog.tsx   # V1.06: uploads a Description file, merges DESC by PPID; V1.11: Show Details on failure
+    │   ├── AddDescriptionDialog.tsx   # V1.06: merges a DESC column by PPID; V1.11: Show Details on failure; V1.13.1: Clipboard Paste only
     │   ├── LargeDatasetWarningDialog.tsx  # V1.06: confirm before Preview Rows = All
     │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
     │   ├── AbortConfirmDialog.tsx     # V1.07: confirm before cancelling an in-flight conversion
@@ -779,13 +774,19 @@ concerns independent and separately testable.
   multi-character Material Codes; an unrecognized code shows a clear error instead of an incorrect
   diagram. Fully isolated from Excel conversion - a Material DB problem disables Visualization
   only. See [CODE_REVIEW_V1.12.md](./CODE_REVIEW_V1.12.md) and [CHANGELOG.md](./CHANGELOG.md).
-- **V1.13 (this branch)** - Clipboard-Only Input UX & Documentation Update: Conversion Input on the
-  Home screen is now Clipboard Paste only (Upload/Drag & Drop removed, no misleading controls left
-  behind); the initial screen and paste-area placeholder both show the 4-step RCC workflow with the
-  exact product names; Add Description gained a light example-format guide (its 3 existing input
-  methods are unchanged); User Guide/FAQ/Troubleshooting rewritten for the clipboard-only workflow;
-  Film Material cells gained a subtle hover affordance. No conversion, Add Description, Error
-  Details, Film Material Visualization, or Material DB logic changed. See
+- **V1.13** - Clipboard-Only Input UX & Documentation Update: Conversion Input on the
+  Home screen became Clipboard Paste only (Upload/Drag & Drop removed); the initial screen and
+  paste-area placeholder both showed the 4-step RCC workflow with the exact product names; Add
+  Description gained a light example-format guide; User Guide/FAQ/Troubleshooting rewritten for
+  the clipboard-only workflow; Film Material cells gained a subtle hover affordance. See
+  [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.13.1 (this branch)** - Follow-up fix, finalizing V1.13's clipboard-only mandate: removed the
+  page-level "How to get your data" guide as redundant with the paste-area placeholder; **Add
+  Description also became Clipboard Paste only** (Upload/Drag & Drop removed, matching Conversion
+  Input); Add Description's example format moved from a permanent block into its own paste-area
+  placeholder (`PPID | DESC` example), the same pattern as Conversion Input. Add Description's
+  PPID-matching behavior, Error Details, Film Material Visualization, and Material DB are
+  unchanged - only Add Description's *input method* changed. See
   [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
@@ -881,3 +882,21 @@ passes unmodified in substance - the handful of tests that changed are the ones 
 asserted the now-removed Upload/Drag & Drop UI, replaced with equivalent "not present" assertions;
 no test covering Excel conversion, Add Description, Error Details, Film Material Visualization, or
 Material DB was altered or removed. 12 tests were added net, for a total of 237.
+
+**V1.13.1 (Clipboard-Only Input UX Follow-up Fix)**: `frontend/lib/converter/`, `materialDb.ts`,
+`filmMaterialParser.ts`, and `cssColor.ts` remain untouched. The only functional changes are
+`HomeScreen.tsx` losing its page-level guide block (the placeholder it duplicated is unchanged) and
+`AddDescriptionDialog.tsx` losing its Upload/Drag & Drop code path (`lib/api.ts`'s file-based
+`addDescription` is no longer called by any UI component as a result, left in place rather than
+deleted for the same reason as `convertFile` above; `addDescriptionFromClipboard` - and therefore
+Add Description's actual PPID-matching/merge behavior - is completely unchanged). The 237-test
+suite passes with one incidental fix unrelated to this version's own changes: `errorLog.test.ts`'s
+`appVersion` format assertion assumed a two-segment `vX.Y` git tag and needed broadening to allow
+the three-segment `v1.13.1` patch tag (the assertion's intent - "the version string is
+well-formed" - is unchanged, only the regex's tag-shape assumption). The tests that changed beyond
+that are exactly the ones that directly asserted the now-removed Add Description Upload/Drag & Drop
+UI or the now-removed page-level guide text, replaced with equivalent "not present"/placeholder
+assertions; no test covering Excel conversion, Add Description's matching logic, Error Details,
+Film Material Visualization, or the Material DB was altered or removed. Net test count is unchanged
+at 237 (the composition shifted: HomeScreen.test.tsx and AddDescriptionDialog.test.tsx each removed
+and added an equal number of tests).
