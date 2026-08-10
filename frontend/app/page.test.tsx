@@ -31,7 +31,7 @@ function pasteInto(element: Element, text: string) {
 }
 
 async function convertViaPaste() {
-  pasteInto(screen.getByPlaceholderText(/paste excel data/i), "PPID\tParameter\tValue\nX1\tPPID\tX1");
+  pasteInto(screen.getByPlaceholderText(/paste rcc data here/i), "PPID\tParameter\tValue\nX1\tPPID\tX1");
   fireEvent.click(screen.getByRole("button", { name: /convert/i }));
   await waitFor(() => expect(screen.getByText("Converted")).toBeInTheDocument());
 }
@@ -61,14 +61,16 @@ describe("Home Reset (V1.09 bug fix)", () => {
       await waitFor(() => expect(dialogTitle).not.toBeInTheDocument());
 
       // Back on the Home screen - the data-dependent toolbar/search/badges are gone.
-      expect(await screen.findByPlaceholderText(/paste excel data/i)).toBeInTheDocument();
+      expect(await screen.findByPlaceholderText(/paste rcc data here/i)).toBeInTheDocument();
       expect(screen.queryByText("Converted")).not.toBeInTheDocument();
       expect(screen.queryByPlaceholderText(/search/i)).not.toBeInTheDocument();
     },
     // This test chains several waitFor/findBy steps (paste -> convert ->
-    // search -> Home confirm -> dialog close) - the default 5s timeout was
-    // occasionally too tight under coverage-instrumentation overhead.
-    10000
+    // search -> Home confirm -> dialog close) - under coverage-instrumentation
+    // overhead even 10s was occasionally too tight (V1.13); raised alongside
+    // vitest.config.mts's new global testTimeout, which this explicit
+    // per-test value otherwise overrides.
+    20000
   );
 
   it(
@@ -93,14 +95,14 @@ describe("Home Reset (V1.09 bug fix)", () => {
       const dialogTitle = await screen.findByText("Return to Home?");
       fireEvent.click(screen.getByRole("button", { name: /^home$/i }));
       await waitFor(() => expect(dialogTitle).not.toBeInTheDocument());
-      await screen.findByPlaceholderText(/paste excel data/i);
+      await screen.findByPlaceholderText(/paste rcc data here/i);
 
       await convertViaPaste();
       expect(screen.getByText("Default")).toBeInTheDocument();
       expect(screen.queryByText("Engineering")).not.toBeInTheDocument();
     },
     // Same coverage-instrumentation-overhead flakiness as the test above -
-    // seen intermittently timing out at the default 5000ms (V1.11).
-    10000
+    // raised alongside vitest.config.mts's new global testTimeout (V1.13).
+    20000
   );
 });

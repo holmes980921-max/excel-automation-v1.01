@@ -2,11 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { toast } from "sonner";
 import HomeScreen from "./HomeScreen";
-import { convertText, convertFile, ApiError, type ConvertResponse } from "@/lib/api";
+import { convertText, ApiError, type ConvertResponse } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
   convertText: vi.fn(),
-  convertFile: vi.fn(),
   ApiError: class ApiError extends Error {
     isValidationError: boolean;
     constructor(message: string, isValidationError = false) {
@@ -32,20 +31,23 @@ function pasteInto(element: Element, text: string) {
   fireEvent.paste(element, { clipboardData: { getData: () => text } });
 }
 
+function pasteTextarea() {
+  return screen.getByPlaceholderText(/paste rcc data here/i);
+}
+
 describe("HomeScreen", () => {
   beforeEach(() => {
     vi.mocked(convertText).mockReset();
-    vi.mocked(convertFile).mockReset();
   });
 
-  it("disables Convert when there is no file or pasted text", () => {
+  it("disables Convert when there is no pasted text", () => {
     render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
     expect(screen.getByRole("button", { name: /convert/i })).toBeDisabled();
   });
 
   it("enables Convert once text is typed", () => {
     render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-    fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), {
+    fireEvent.change(pasteTextarea(), {
       target: { value: "PPID\tParameter\tValue\nX1\tPPID\tX1" },
     });
     expect(screen.getByRole("button", { name: /convert/i })).not.toBeDisabled();
@@ -56,7 +58,7 @@ describe("HomeScreen", () => {
     const onConverted = vi.fn();
     render(<HomeScreen onConverted={onConverted} debugMode={false} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), {
+    fireEvent.change(pasteTextarea(), {
       target: { value: "PPID\tParameter\tValue\nX1\tPPID\tX1" },
     });
     fireEvent.click(screen.getByRole("button", { name: /convert/i }));
@@ -67,7 +69,6 @@ describe("HomeScreen", () => {
       false,
       expect.any(AbortSignal)
     );
-    expect(convertFile).not.toHaveBeenCalled();
   });
 
   it("shows an error and does not call onConverted when conversion fails", async () => {
@@ -75,19 +76,75 @@ describe("HomeScreen", () => {
     const onConverted = vi.fn();
     render(<HomeScreen onConverted={onConverted} debugMode={false} />);
 
-    fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), {
-      target: { value: "bad data" },
-    });
+    fireEvent.change(pasteTextarea(), { target: { value: "bad data" } });
     fireEvent.click(screen.getByRole("button", { name: /convert/i }));
 
     expect(await screen.findByText("Conversion failed (400)")).toBeInTheDocument();
     expect(onConverted).not.toHaveBeenCalled();
   });
 
+  describe("Conversion Input - Clipboard Paste only (V1.13)", () => {
+    it("does not render a file upload input", () => {
+      const { container } = render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      expect(container.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    });
+
+    it("does not render any Drag & Drop or Upload/Browse affordance", () => {
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      expect(screen.queryByText(/drag\s*&\s*drop/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/browse file/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^upload$/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the light/subdued RCC workflow placeholder when the input is empty", () => {
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      const textarea = pasteTextarea();
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("All Export to Excel"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("EXPORT_ALL_TABLE_%%.xls"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("Ctrl+A"));
+    });
+
+    it("the placeholder disappears once data is pasted (summary replaces the textarea)", () => {
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      pasteInto(pasteTextarea(), "PPID\tParameter\tValue\nX1\tPPID\tX1");
+
+      expect(screen.queryByPlaceholderText(/paste rcc data here/i)).not.toBeInTheDocument();
+      expect(screen.getByText("Clipboard Loaded")).toBeInTheDocument();
+    });
+
+    it("Clipboard Paste remains available and drives Convert", async () => {
+      vi.mocked(convertText).mockResolvedValue(RESPONSE);
+      const onConverted = vi.fn();
+      render(<HomeScreen onConverted={onConverted} debugMode={false} />);
+
+      pasteInto(pasteTextarea(), "PPID\tParameter\tValue\nX1\tPPID\tX1\tTS#1_CardName\tCARD1");
+      fireEvent.click(screen.getByRole("button", { name: /convert/i }));
+
+      await waitFor(() => expect(onConverted).toHaveBeenCalledWith(RESPONSE));
+    });
+  });
+
+  describe("Initial screen guidance (V1.13)", () => {
+    it("renders the four-step RCC workflow guide with the product-specific names intact", () => {
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+
+      expect(screen.getByText(/All Export to Excel/)).toBeInTheDocument();
+      expect(screen.getByText(/EXPORT_ALL_TABLE_%%\.xls/)).toBeInTheDocument();
+      expect(screen.getByText(/Ctrl\+A, then Ctrl\+C/)).toBeInTheDocument();
+      expect(screen.getByText(/Paste the data into the web application and click Convert/)).toBeInTheDocument();
+    });
+
+    it("does not mention uploading or dragging a file anywhere in the guidance", () => {
+      render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
+      expect(screen.queryByText(/upload.*file/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/drag.*drop/i)).not.toBeInTheDocument();
+    });
+  });
+
   describe("large paste (V1.08 freeze fix)", () => {
     it("shows a summary instead of rendering the raw pasted text", () => {
       render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-      const textarea = screen.getByPlaceholderText(/paste excel data/i);
+      const textarea = pasteTextarea();
 
       const bigText = "PPID\tParameter\tValue\n" + Array.from({ length: 5000 }, (_, i) => `P${i}\tPPID\tP${i}`).join("\n");
       pasteInto(textarea, bigText);
@@ -96,7 +153,7 @@ describe("HomeScreen", () => {
       expect(screen.getByText("Rows: 5,000")).toBeInTheDocument();
       expect(screen.getByText("Columns: 3")).toBeInTheDocument();
       // The raw text must never appear as rendered textarea content.
-      expect(screen.queryByPlaceholderText(/paste excel data/i)).not.toBeInTheDocument();
+      expect(screen.queryByPlaceholderText(/paste rcc data here/i)).not.toBeInTheDocument();
       expect(screen.queryByDisplayValue(bigText)).not.toBeInTheDocument();
     });
 
@@ -106,7 +163,7 @@ describe("HomeScreen", () => {
       render(<HomeScreen onConverted={onConverted} debugMode={false} />);
 
       const bigText = "PPID\tParameter\tValue\nP1\tPPID\tP1\nP1\tTS#1_CardName\tCARD1";
-      pasteInto(screen.getByPlaceholderText(/paste excel data/i), bigText);
+      pasteInto(pasteTextarea(), bigText);
       fireEvent.click(screen.getByRole("button", { name: /convert/i }));
 
       await waitFor(() => expect(onConverted).toHaveBeenCalledWith(RESPONSE));
@@ -115,13 +172,13 @@ describe("HomeScreen", () => {
 
     it("Clear discards the summary and restores the empty paste box", () => {
       render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-      pasteInto(screen.getByPlaceholderText(/paste excel data/i), "PPID\tParameter\tValue\nP1\tPPID\tP1");
+      pasteInto(pasteTextarea(), "PPID\tParameter\tValue\nP1\tPPID\tP1");
       expect(screen.getByText("Clipboard Loaded")).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /clear/i }));
 
       expect(screen.queryByText("Clipboard Loaded")).not.toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/paste excel data/i)).toBeInTheDocument();
+      expect(pasteTextarea()).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /convert/i })).toBeDisabled();
     });
   });
@@ -131,7 +188,7 @@ describe("HomeScreen", () => {
       vi.mocked(convertText).mockRejectedValue(new ApiError("Unrecognized file format", false));
       render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
 
-      fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), { target: { value: "bad data" } });
+      fireEvent.change(pasteTextarea(), { target: { value: "bad data" } });
       fireEvent.click(screen.getByRole("button", { name: /convert/i }));
 
       await screen.findByText("Unrecognized file format");
@@ -151,7 +208,7 @@ describe("HomeScreen", () => {
       );
       render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
 
-      fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), { target: { value: "bad data" } });
+      fireEvent.change(pasteTextarea(), { target: { value: "bad data" } });
       fireEvent.click(screen.getByRole("button", { name: /convert/i }));
 
       await screen.findByText(/duplicate PPID/);
@@ -171,7 +228,7 @@ describe("HomeScreen", () => {
       const onConverted = vi.fn();
 
       render(<HomeScreen onConverted={onConverted} debugMode={false} />);
-      fireEvent.change(screen.getByPlaceholderText(/paste excel data/i), {
+      fireEvent.change(pasteTextarea(), {
         target: { value: "PPID\tParameter\tValue\nX1\tPPID\tX1" },
       });
       fireEvent.click(screen.getByRole("button", { name: /convert/i }));
@@ -197,58 +254,6 @@ describe("HomeScreen", () => {
       expect(screen.getByRole("button", { name: /convert/i })).not.toBeDisabled();
       expect(onConverted).not.toHaveBeenCalled();
       expect(toastErrorSpy).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("Remove selected file (V1.09)", () => {
-    function selectFile(container: HTMLElement, file: File) {
-      const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-      fireEvent.change(input, { target: { files: [file] } });
-    }
-
-    it("shows a Selected File card with a Remove action once a file is chosen", async () => {
-      const { container } = render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-      const file = new File(["dummy"], "sample.xlsx", {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      selectFile(container, file);
-
-      // react-dropzone validates/processes the selected file asynchronously.
-      expect(await screen.findByText("sample.xlsx")).toBeInTheDocument();
-      expect(screen.getByText("Selected File")).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /convert/i })).not.toBeDisabled();
-    });
-
-    it("Remove clears the selection and restores the empty upload dropzone", async () => {
-      const { container } = render(<HomeScreen onConverted={vi.fn()} debugMode={false} />);
-      const file = new File(["dummy"], "sample.xlsx", {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      selectFile(container, file);
-      expect(await screen.findByText("sample.xlsx")).toBeInTheDocument();
-
-      fireEvent.click(screen.getByRole("button", { name: /remove/i }));
-
-      expect(screen.queryByText("sample.xlsx")).not.toBeInTheDocument();
-      expect(screen.getByText(/drag & drop excel/i)).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: /convert/i })).toBeDisabled();
-    });
-
-    it("converts using the selected file after it survives to Convert", async () => {
-      vi.mocked(convertFile).mockResolvedValue(RESPONSE);
-      const onConverted = vi.fn();
-      const { container } = render(<HomeScreen onConverted={onConverted} debugMode={false} />);
-      const file = new File(["dummy"], "sample.xlsx", {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      selectFile(container, file);
-      await screen.findByText("sample.xlsx");
-
-      fireEvent.click(screen.getByRole("button", { name: /convert/i }));
-
-      await waitFor(() => expect(onConverted).toHaveBeenCalledWith(RESPONSE));
-      expect(convertFile).toHaveBeenCalledWith(file, false, expect.any(AbortSignal));
-      expect(convertText).not.toHaveBeenCalled();
     });
   });
 });

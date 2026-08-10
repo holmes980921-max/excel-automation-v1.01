@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useRef, useState, type ClipboardEvent } from "react";
-import { useDropzone, type FileRejection } from "react-dropzone";
+import { useRef, useState, type ClipboardEvent } from "react";
 import { Box, Button, Typography, TextField, Divider, IconButton, Tooltip } from "@mui/material";
-import { FileSpreadsheet, UploadCloud, XCircle, ClipboardPaste, Play, CheckCircle2, X } from "lucide-react";
+import { ClipboardPaste, Play, CheckCircle2, X } from "lucide-react";
 import { toast } from "sonner";
-import { convertFile, convertText, ApiError, type ConvertResponse } from "@/lib/api";
-import { ACCEPTED_FILE_TYPES, describeRejection } from "@/lib/uploadValidation";
+import { convertText, ApiError, type ConvertResponse } from "@/lib/api";
 import { summarizePastedText, type PasteSummary } from "@/lib/pasteSummary";
 import { buildErrorLogEntry, toError, type ErrorLogEntry } from "@/lib/errorLog";
 import ProcessingOverlay from "@/components/ProcessingOverlay";
@@ -17,7 +15,27 @@ import ErrorLogDialog from "@/components/ErrorLogDialog";
 // itself to fit every line of its value - fine for typed input, but a
 // disaster if hundreds of thousands of pasted lines ever reached it (see
 // handleTextPaste below, which makes sure they never do).
-const PASTE_TEXTAREA_MAX_ROWS = 8;
+const PASTE_TEXTAREA_MAX_ROWS = 10;
+
+// V1.13: Clipboard Paste is the only supported Conversion Input method -
+// "All Export to Excel" and "EXPORT_ALL_TABLE_%%.xls" are RCC's own product
+// names and must not be reworded. Shown both as this placeholder (inside
+// the empty input) and as the page-level numbered guide below, so the
+// instructions are visible whether or not the user has scrolled to/focused
+// the input yet.
+const PASTE_PLACEHOLDER = `Paste RCC data here
+
+1. Save the RCC Excel file using "All Export to Excel".
+2. Open the file "EXPORT_ALL_TABLE_%%.xls".
+3. Press Ctrl+A, then Ctrl+C.
+4. Paste the data here and click Convert.`;
+
+const GUIDE_STEPS = [
+  'Save the RCC Excel file using "All Export to Excel".',
+  'Open the file "EXPORT_ALL_TABLE_%%.xls".',
+  "Press Ctrl+A, then Ctrl+C.",
+  "Paste the data into the web application and click Convert.",
+];
 
 type Props = {
   onConverted: (data: ConvertResponse) => void;
@@ -25,13 +43,15 @@ type Props = {
 };
 
 /**
- * The application's starting point (V1.07) - replaces the old modal
- * UploadDialog. No "Upload" click is needed first: drag & drop, browse, or
- * paste directly here, then Convert. Selecting a file clears any pasted
- * text and vice versa, so there's always exactly one unambiguous input.
+ * The application's starting point (V1.07). V1.13: Clipboard Paste is the
+ * only supported Conversion Input method - File Upload and Drag & Drop
+ * were removed (not just hidden) to standardize the workflow around
+ * RCC's actual "All Export to Excel" -> copy -> paste process and avoid
+ * encouraging a file-selection path that no longer exists. Add
+ * Description (a separate dialog) is unaffected - it still supports
+ * Upload/Drag & Drop/Paste, per V1.13's own scope.
  */
 export default function HomeScreen({ onConverted, debugMode }: Props) {
-  const [file, setFile] = useState<File | null>(null);
   const [pastedText, setPastedText] = useState("");
   // Set only via handleTextPaste - the raw pasted text itself never enters
   // rendered state (see rawPasteTextRef), only its summary does.
@@ -48,32 +68,10 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const rawPasteTextRef = useRef("");
 
-  const onDrop = useCallback((accepted: File[], rejections: FileRejection[]) => {
-    if (rejections.length > 0) {
-      setError(describeRejection(rejections[0]));
-      return;
-    }
-    if (accepted[0]) {
-      setFile(accepted[0]);
-      setPastedText("");
-      setPasteSummary(null);
-      rawPasteTextRef.current = "";
-      setError(null);
-    }
-  }, []);
-
-  const { getRootProps, getInputProps, isDragActive, isDragAccept, isDragReject } = useDropzone({
-    onDrop,
-    multiple: false,
-    accept: ACCEPTED_FILE_TYPES,
-    disabled: loading,
-  });
-
   const handlePasteChange = (value: string) => {
     // Typed input only - actual paste events are intercepted below and
     // never reach here, so this never has to handle a huge string.
     setPastedText(value);
-    if (value.trim()) setFile(null);
   };
 
   // Intercepts the paste event itself so pasted content never touches the
@@ -89,7 +87,6 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     rawPasteTextRef.current = text;
     setPasteSummary(summarizePastedText(text));
     setPastedText("");
-    setFile(null);
     setError(null);
   };
 
@@ -99,17 +96,10 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     setPastedText("");
   };
 
-  // V1.09: lets a user back out of an accidental upload before converting,
-  // without needing to drop a replacement file or navigate away.
-  const handleRemoveFile = () => {
-    setFile(null);
-    setError(null);
-  };
-
   const handleConvert = async () => {
     if (loading) return; // belt-and-suspenders against a duplicate in-flight request
     const pasteText = pasteSummary ? rawPasteTextRef.current : pastedText;
-    if (!file && !pasteText.trim()) return;
+    if (!pasteText.trim()) return;
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -117,11 +107,8 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     setError(null);
     setErrorLogEntry(null);
     try {
-      const data = file
-        ? await convertFile(file, debugMode, controller.signal)
-        : await convertText(pasteText, debugMode, controller.signal);
+      const data = await convertText(pasteText, debugMode, controller.signal);
       onConverted(data);
-      setFile(null);
       setPastedText("");
       setPasteSummary(null);
       rawPasteTextRef.current = "";
@@ -151,14 +138,7 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
     setAbortConfirmOpen(false);
   };
 
-  const canConvert = !!file || !!pasteSummary || !!pastedText.trim();
-
-  const dropzoneBorderColor = isDragReject ? "error.main" : isDragAccept ? "success.main" : "divider";
-  const dropzoneBackground = isDragReject
-    ? "rgba(211, 47, 47, 0.06)"
-    : isDragAccept
-      ? "rgba(46, 125, 50, 0.06)"
-      : "transparent";
+  const canConvert = !!pasteSummary || !!pastedText.trim();
 
   return (
     <Box
@@ -171,154 +151,98 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
         justifyContent: "center",
         px: 3,
         py: 4,
+        overflowY: "auto",
       }}
     >
-      <ProcessingOverlay
-        open={loading}
-        fileSizeMB={file ? file.size / (1024 * 1024) : undefined}
-        onAbortClick={handleAbortClick}
-      />
+      <ProcessingOverlay open={loading} onAbortClick={handleAbortClick} />
 
-      <Box sx={{ width: "100%", maxWidth: 860 }}>
+      <Box sx={{ width: "100%", maxWidth: 620 }}>
         <Typography variant="h4" align="center" sx={{ fontWeight: 700, mb: 2 }}>
           RCC Excel Automation
         </Typography>
-        <Divider sx={{ mb: 4 }} />
+        <Divider sx={{ mb: 3 }} />
 
-        <Box sx={{ display: "flex", gap: 3, flexWrap: "wrap" }}>
-          <Box sx={{ flex: "1 1 320px" }}>
-            {file ? (
-              // Matches the Paste panel's "Clipboard Loaded" card for
-              // consistency (V1.09) - both give an explicit way to back
-              // out of an accidental selection before converting.
-              <Box
-                sx={{
-                  border: "2px dashed",
-                  borderColor: "success.main",
-                  borderRadius: 2,
-                  background: "rgba(46, 125, 50, 0.06)",
-                  p: 4,
-                }}
-              >
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, textAlign: "center" }}>
-                  Upload
-                </Typography>
-                <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
-                  <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                      <FileSpreadsheet size={16} color="#2e7d32" />
-                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                        Selected File
-                      </Typography>
-                    </Box>
-                    <Tooltip title="Remove">
-                      <IconButton size="small" aria-label="Remove" onClick={handleRemoveFile} disabled={loading}>
-                        <X size={14} />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ wordBreak: "break-all" }}>
-                    {file.name}
-                  </Typography>
-                </Box>
-              </Box>
-            ) : (
-              <Box
-                {...getRootProps()}
-                sx={{
-                  border: "2px dashed",
-                  borderColor: dropzoneBorderColor,
-                  borderRadius: 2,
-                  p: 4,
-                  textAlign: "center",
-                  cursor: loading ? "default" : "pointer",
-                  background: dropzoneBackground,
-                  transition: "border-color 0.15s ease, background 0.15s ease",
-                }}
-              >
-                <input {...getInputProps()} />
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                  Upload
-                </Typography>
-                <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
-                  {isDragReject ? <XCircle size={32} color="#d32f2f" /> : <UploadCloud size={32} />}
-                </Box>
-                <Typography color={isDragReject ? "error" : "text.secondary"} sx={{ mb: 0.5 }}>
-                  {isDragReject
-                    ? "This file type isn't supported"
-                    : isDragActive
-                      ? "Drop the file here"
-                      : "Drag & Drop Excel"}
-                </Typography>
-                {!isDragReject && (
-                  <Typography variant="caption" color="text.secondary">
-                    or click to Browse File
-                  </Typography>
-                )}
-              </Box>
-            )}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1, textAlign: "center" }}>
+            How to get your data
+          </Typography>
+          <Box component="ol" sx={{ m: 0, pl: 3 }}>
+            {GUIDE_STEPS.map((step) => (
+              <Typography key={step} component="li" variant="body2" color="text.secondary" sx={{ mb: 0.25 }}>
+                {step}
+              </Typography>
+            ))}
           </Box>
+        </Box>
 
-          <Box
-            sx={{
-              flex: "1 1 320px",
-              border: "2px dashed",
-              borderColor: pastedText || pasteSummary ? "success.main" : "divider",
-              borderRadius: 2,
-              p: 4,
-              textAlign: "center",
-              background: pastedText || pasteSummary ? "rgba(46, 125, 50, 0.06)" : "transparent",
-            }}
-          >
-            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-              Paste
-            </Typography>
-            <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
-              <ClipboardPaste size={32} />
+        <Box
+          sx={{
+            border: "2px dashed",
+            borderColor: pastedText || pasteSummary ? "success.main" : "divider",
+            borderRadius: 2,
+            p: 4,
+            textAlign: "center",
+            background: pastedText || pasteSummary ? "rgba(46, 125, 50, 0.06)" : "transparent",
+          }}
+        >
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+            Paste
+          </Typography>
+          <Box sx={{ display: "flex", justifyContent: "center", mb: 1, color: "text.secondary" }}>
+            <ClipboardPaste size={32} />
+          </Box>
+          {pasteSummary ? (
+            // Large-dataset fix (V1.08): the raw pasted text never renders
+            // here - only this lightweight summary does, regardless of
+            // how many rows were pasted.
+            <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
+              <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                  <CheckCircle2 size={16} color="#2e7d32" />
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    Clipboard Loaded
+                  </Typography>
+                </Box>
+                <Tooltip title="Clear">
+                  <IconButton size="small" aria-label="Clear" onClick={handleClearPaste} disabled={loading}>
+                    <X size={14} />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              <Typography variant="body2" color="text.secondary">
+                Rows: {pasteSummary.rows.toLocaleString()}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Columns: {pasteSummary.columns.toLocaleString()}
+              </Typography>
+              <Typography variant="body2" color="success.main" sx={{ mt: 0.5 }}>
+                Status: Ready to Convert
+              </Typography>
             </Box>
-            {pasteSummary ? (
-              // Large-dataset fix (V1.08): the raw pasted text never renders
-              // here - only this lightweight summary does, regardless of
-              // how many rows were pasted.
-              <Box sx={{ background: "#fff", borderRadius: 1, p: 2, textAlign: "left" }}>
-                <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
-                    <CheckCircle2 size={16} color="#2e7d32" />
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                      Clipboard Loaded
-                    </Typography>
-                  </Box>
-                  <Tooltip title="Clear">
-                    <IconButton size="small" aria-label="Clear" onClick={handleClearPaste} disabled={loading}>
-                      <X size={14} />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                <Typography variant="body2" color="text.secondary">
-                  Rows: {pasteSummary.rows.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Columns: {pasteSummary.columns.toLocaleString()}
-                </Typography>
-                <Typography variant="body2" color="success.main" sx={{ mt: 0.5 }}>
-                  Status: Ready to Convert
-                </Typography>
-              </Box>
-            ) : (
-              <TextField
-                multiline
-                minRows={4}
-                maxRows={PASTE_TEXTAREA_MAX_ROWS}
-                fullWidth
-                disabled={loading}
-                placeholder="Ctrl + V - Paste Excel Data"
-                value={pastedText}
-                onChange={(e) => handlePasteChange(e.target.value)}
-                onPaste={handleTextPaste}
-                sx={{ background: "#fff" }}
-              />
-            )}
-          </Box>
+          ) : (
+            <TextField
+              multiline
+              minRows={5}
+              maxRows={PASTE_TEXTAREA_MAX_ROWS}
+              fullWidth
+              disabled={loading}
+              placeholder={PASTE_PLACEHOLDER}
+              value={pastedText}
+              onChange={(e) => handlePasteChange(e.target.value)}
+              onPaste={handleTextPaste}
+              sx={{
+                background: "#fff",
+                // The placeholder is deliberately light/subdued (spec:
+                // "visually subdued/light text color") - MUI's default
+                // placeholder opacity already does this, this just pins
+                // the exact shade rather than relying on the theme default.
+                "& .MuiInputBase-input::placeholder": {
+                  color: "text.disabled",
+                  opacity: 1,
+                },
+              }}
+            />
+          )}
         </Box>
 
         {error && (
@@ -344,23 +268,6 @@ export default function HomeScreen({ onConverted, debugMode }: Props) {
           >
             Convert
           </Button>
-        </Box>
-
-        <Divider sx={{ my: 4 }} />
-
-        <Box sx={{ display: "flex", justifyContent: "center", gap: 3 }}>
-          <Typography variant="body2" color="text.secondary">
-            Supported:
-          </Typography>
-          <Typography variant="body2" color="success.main">
-            ✓ .xls
-          </Typography>
-          <Typography variant="body2" color="success.main">
-            ✓ .xlsx
-          </Typography>
-          <Typography variant="body2" color="success.main">
-            ✓ .xlsm
-          </Typography>
         </Box>
       </Box>
 
