@@ -12,6 +12,19 @@ import { resolveDisplayColumns, type TransformationRule } from "@/lib/rules";
 // field name, unaffected by a Transformation Rule's display alias.
 const FILM_MATERIAL_FIELD = "FilmMaterial";
 
+// Mirrors lib/converter/constants.ts's MISSING_VALUE - not imported
+// directly, to keep ExcelGrid decoupled from the conversion engine (see
+// the project's established "renders whatever it's given" boundary) - a
+// missing field is never a meaningful Film Material value to visualize,
+// so it shouldn't look or behave as clickable (found as a pre-existing
+// V1.12 edge case while adding V1.13's hover affordance: a bare truthy-
+// string check treated "-" as clickable, same as any real value).
+const MISSING_VALUE_PLACEHOLDER = "-";
+
+function isClickableFilmMaterialValue(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "" && value !== MISSING_VALUE_PLACEHOLDER;
+}
+
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 type ExtraColumn = {
@@ -81,9 +94,12 @@ export default function ExcelGrid({ rows, rule, extraColumns = [], onFilmMateria
       // the grid level (onGridCellClicked below), not per-column - AG
       // Grid's per-colDef onCellClicked is documented but the grid-level
       // handler is the more standard, more reliably-invoked hook.
+      // V1.13: also gets a subtle hover affordance (underline + slight
+      // color shift, see globals.css's .film-material-cell:hover) so it's
+      // more obvious the value is clickable - normal state is unchanged.
       if (field === FILM_MATERIAL_FIELD && onFilmMaterialClick) {
-        colDef.cellStyle = (params) =>
-          typeof params.value === "string" && params.value.trim() ? { cursor: "pointer" } : null;
+        colDef.cellStyle = (params) => (isClickableFilmMaterialValue(params.value) ? { cursor: "pointer" } : null);
+        colDef.cellClass = (params) => (isClickableFilmMaterialValue(params.value) ? "film-material-cell" : "");
       }
 
       return colDef;
@@ -119,7 +135,7 @@ export default function ExcelGrid({ rows, rule, extraColumns = [], onFilmMateria
 
   const handleCellClicked = (event: CellClickedEvent) => {
     if (event.colDef.field !== FILM_MATERIAL_FIELD || !onFilmMaterialClick) return;
-    if (typeof event.value === "string" && event.value.trim()) onFilmMaterialClick(event.value);
+    if (isClickableFilmMaterialValue(event.value)) onFilmMaterialClick(event.value);
   };
 
   return (

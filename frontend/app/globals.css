@@ -81,3 +81,19 @@ body > div {
   text-align: center;
   justify-content: center;
 }
+
+/* V1.13: subtle hover affordance for a clickable filmmaterial value -
+ * communicates "this can be clicked" (a short underline + slight color
+ * shift, both transitioning in smoothly) without turning the cell into a
+ * button. Applied via a cellClass in ExcelGrid.tsx, only to non-empty
+ * filmmaterial cells (matches the same condition the pointer-cursor
+ * cellStyle already uses). Normal (non-hover) state is deliberately
+ * unchanged from ordinary table text. */
+.excel-grid .film-material-cell {
+  transition: color 0.15s ease;
+}
+.excel-grid .film-material-cell:hover {
+  color: #1565c0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

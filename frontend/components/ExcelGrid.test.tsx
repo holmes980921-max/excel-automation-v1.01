@@ -37,17 +37,25 @@ async function findCell(container: HTMLElement, colId: string): Promise<HTMLElem
 // unchanged from V1.10/V1.11 and already covered indirectly through
 // app/page.test.tsx; these tests cover only what's new.
 describe("ExcelGrid - Film Material Visualization click wiring (V1.12)", () => {
-  it("calls onFilmMaterialClick with the raw cell value when a filmmaterial cell is clicked", async () => {
-    const onFilmMaterialClick = vi.fn();
-    const { container } = render(
-      <ExcelGrid rows={[sampleRow("MOCK_ABC_001_X_002")]} rule={DEFAULT_RULE} onFilmMaterialClick={onFilmMaterialClick} />
-    );
+  it(
+    "calls onFilmMaterialClick with the raw cell value when a filmmaterial cell is clicked",
+    async () => {
+      const onFilmMaterialClick = vi.fn();
+      const { container } = render(
+        <ExcelGrid rows={[sampleRow("MOCK_ABC_001_X_002")]} rule={DEFAULT_RULE} onFilmMaterialClick={onFilmMaterialClick} />
+      );
 
-    const cell = await findCell(container, "FilmMaterial");
-    cell.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+      const cell = await findCell(container, "FilmMaterial");
+      cell.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
-    await waitFor(() => expect(onFilmMaterialClick).toHaveBeenCalledWith("MOCK_ABC_001_X_002"));
-  });
+      await waitFor(() => expect(onFilmMaterialClick).toHaveBeenCalledWith("MOCK_ABC_001_X_002"));
+    },
+    // AG Grid's first render can be slow under coverage-instrumentation
+    // overhead - same class of flakiness already seen and fixed for
+    // app/page.test.tsx's Home Reset tests (V1.09/V1.11); raised alongside
+    // vitest.config.mts's new global testTimeout (V1.13).
+    20000
+  );
 
   it("does not call the handler for an empty/missing filmmaterial value", async () => {
     const onFilmMaterialClick = vi.fn();
@@ -75,5 +83,34 @@ describe("ExcelGrid - Film Material Visualization click wiring (V1.12)", () => {
     cardNameCell.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
     expect(onFilmMaterialClick).not.toHaveBeenCalled();
+  });
+});
+
+// V1.13: hover-affordance wiring. jsdom doesn't compute live `:hover`
+// pseudo-class styles from a simulated mouse-over, so what's verifiable
+// here is the *mechanism* - the class that carries the hover CSS (defined
+// in app/globals.css, see the dedicated test below) is applied to a
+// clickable cell and not to a non-clickable one.
+describe("ExcelGrid - Film Material hover affordance (V1.13)", () => {
+  it("applies the hover-affordance class to a non-empty filmmaterial cell", async () => {
+    const { container } = render(
+      <ExcelGrid rows={[sampleRow("MOCK_ABC_001_X_002")]} rule={DEFAULT_RULE} onFilmMaterialClick={vi.fn()} />
+    );
+    const cell = await findCell(container, "FilmMaterial");
+    expect(cell.className).toContain("film-material-cell");
+  });
+
+  it("does not apply the hover-affordance class to an empty/missing filmmaterial value", async () => {
+    const { container } = render(<ExcelGrid rows={[sampleRow("-")]} rule={DEFAULT_RULE} onFilmMaterialClick={vi.fn()} />);
+    const cell = await findCell(container, "FilmMaterial");
+    expect(cell.className).not.toContain("film-material-cell");
+  });
+
+  it("does not apply the hover-affordance class to a non-filmmaterial column", async () => {
+    const { container } = render(
+      <ExcelGrid rows={[sampleRow("MOCK_ABC_001_X_002")]} rule={DEFAULT_RULE} onFilmMaterialClick={vi.fn()} />
+    );
+    const cell = await findCell(container, "CardName");
+    expect(cell.className).not.toContain("film-material-cell");
   });
 });
