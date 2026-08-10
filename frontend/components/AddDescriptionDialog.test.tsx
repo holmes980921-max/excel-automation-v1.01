@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import AddDescriptionDialog from "./AddDescriptionDialog";
-import { addDescription, addDescriptionFromClipboard, ApiError, type AddDescriptionResponse } from "@/lib/api";
+import { addDescriptionFromClipboard, ApiError, type AddDescriptionResponse } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({
-  addDescription: vi.fn(),
   addDescriptionFromClipboard: vi.fn(),
   ApiError: class ApiError extends Error {
     isValidationError: boolean;
@@ -23,6 +22,13 @@ function pasteInto(element: Element, text: string, html?: string) {
   });
 }
 
+/** V1.13 follow-up: the example PPID/DESC format lives in the paste area's
+ * placeholder, not a separate visible block - matched on a substring unique
+ * to it, mirroring HomeScreen.test.tsx's pasteTextarea() helper. */
+function pasteTextarea() {
+  return screen.getByPlaceholderText(/PPID1/);
+}
+
 const RESPONSE: AddDescriptionResponse = {
   columns: ["PPID", "DESC"],
   rows: [{ PPID: "X1", DESC: "note" }],
@@ -32,79 +38,66 @@ const RESPONSE: AddDescriptionResponse = {
   unmatched_ppids: [],
 };
 
-// MUI's Dialog portals its content to document.body rather than rendering
-// inline, so the file input has to be found there, not in render()'s own
-// container.
-function selectFile(file: File) {
-  const input = document.body.querySelector('input[type="file"]') as HTMLInputElement;
-  fireEvent.change(input, { target: { files: [file] } });
-}
-
 describe("AddDescriptionDialog", () => {
   beforeEach(() => {
-    vi.mocked(addDescription).mockReset();
     vi.mocked(addDescriptionFromClipboard).mockReset();
   });
 
-  it("shows the example PPID/DESC format guide (V1.13)", () => {
-    render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
-    expect(screen.getByText(/example format/i)).toBeInTheDocument();
-    expect(screen.getByText(/PPID1/)).toBeInTheDocument();
-    expect(screen.getByText(/DESC1/)).toBeInTheDocument();
+  describe("Clipboard Paste only (V1.13 follow-up fix)", () => {
+    it("does not render a file upload input", () => {
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
+      expect(document.body.querySelector('input[type="file"]')).not.toBeInTheDocument();
+    });
+
+    it("does not render any Drag & Drop or Upload/Browse affordance", () => {
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
+      expect(screen.queryByText(/drag\s*&\s*drop/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/browse/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/^upload$/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/selected file/i)).not.toBeInTheDocument();
+    });
+
+    it("shows the PPID/DESC example format as a light placeholder, preserving the column relationship", () => {
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
+      const textarea = pasteTextarea();
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("PPID"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("DESC"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("PPID1"));
+      expect(textarea).toHaveAttribute("placeholder", expect.stringContaining("DESC1"));
+    });
+
+    it("the placeholder disappears once data is pasted (never becomes part of the pasted data)", async () => {
+      vi.mocked(addDescriptionFromClipboard).mockResolvedValue(RESPONSE);
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[{ PPID: "X1" }]} onMerged={vi.fn()} />);
+
+      pasteInto(pasteTextarea(), "PPID\tDESC\nX1\tnote");
+      expect(screen.queryByPlaceholderText(/PPID1/)).not.toBeInTheDocument();
+      expect(screen.getByText("Clipboard Loaded")).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
+      await waitFor(() => expect(addDescriptionFromClipboard).toHaveBeenCalled());
+      // The example rows (PPID1/DESC1/...) were only ever placeholder text,
+      // never sent as real data.
+      expect(vi.mocked(addDescriptionFromClipboard).mock.calls[0][0].text).toBe("PPID\tDESC\nX1\tnote");
+    });
+
+    it("does not mention Upload or Drag & Drop in the dialog's description text", () => {
+      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
+      expect(screen.queryByText(/upload/i)).not.toBeInTheDocument();
+      expect(screen.queryByText(/drag/i)).not.toBeInTheDocument();
+      expect(screen.getByText(/paste the data directly from excel/i)).toBeInTheDocument();
+    });
   });
 
-  it("still supports Upload/Drag & Drop alongside Clipboard Paste (V1.13 scope: unchanged)", () => {
-    render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
-    expect(document.body.querySelector('input[type="file"]')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/paste ppid\/desc data/i)).toBeInTheDocument();
-  });
-
-  it("Add Description stays disabled until a file is selected", () => {
+  it("Add Description stays disabled until data is pasted", () => {
     render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
     expect(screen.getByRole("button", { name: /^add description$/i })).toBeDisabled();
   });
 
-  it("shows a Selected File card once a file is chosen, and Remove clears it (V1.09)", async () => {
-    render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
-    const file = new File(["dummy"], "descriptions.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    selectFile(file);
-
-    expect(await screen.findByText("descriptions.xlsx")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^add description$/i })).not.toBeDisabled();
-
-    fireEvent.click(screen.getByRole("button", { name: /remove/i }));
-
-    expect(screen.queryByText("descriptions.xlsx")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^add description$/i })).toBeDisabled();
-  });
-
-  it("merges the selected file and reports the result", async () => {
-    vi.mocked(addDescription).mockResolvedValue(RESPONSE);
-    const onMerged = vi.fn();
-    const baseRows = [{ PPID: "X1" }];
-    render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={baseRows} onMerged={onMerged} />);
-    const file = new File(["dummy"], "descriptions.xlsx", {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    selectFile(file);
-    await screen.findByText("descriptions.xlsx");
-
-    fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
-
-    await waitFor(() => expect(onMerged).toHaveBeenCalledWith(RESPONSE));
-    expect(addDescription).toHaveBeenCalledWith(file, baseRows);
-  });
-
-  // V1.10: Add Description previously only supported Drag & Drop/Upload -
-  // Clipboard Paste is new this version (see engine.ts's
-  // addDescriptionFromClipboard, which unifies all three input methods
-  // through the same normalization pipeline).
-  describe("Clipboard Paste (V1.10)", () => {
+  describe("Clipboard Paste (matching behavior unchanged since V1.10)", () => {
     it("shows a Clipboard Loaded summary after pasting, and Clear resets it", () => {
       render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
-      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nX1\tnote");
+      pasteInto(pasteTextarea(), "PPID\tDESC\nX1\tnote");
 
       expect(screen.getByText("Clipboard Loaded")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /^add description$/i })).not.toBeDisabled();
@@ -121,7 +114,7 @@ describe("AddDescriptionDialog", () => {
       const baseRows = [{ PPID: "X1" }];
       render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={baseRows} onMerged={onMerged} />);
 
-      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nX1\tnote");
+      pasteInto(pasteTextarea(), "PPID\tDESC\nX1\tnote");
       fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
 
       await waitFor(() => expect(onMerged).toHaveBeenCalledWith(RESPONSE));
@@ -137,7 +130,7 @@ describe("AddDescriptionDialog", () => {
       render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={baseRows} onMerged={vi.fn()} />);
 
       const html = "<table><tr><td>PPID</td><td>DESC</td></tr><tr><td>X1</td><td>note</td></tr></table>";
-      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nX1\tnote", html);
+      pasteInto(pasteTextarea(), "PPID\tDESC\nX1\tnote", html);
       fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
 
       await waitFor(() => expect(addDescriptionFromClipboard).toHaveBeenCalled());
@@ -145,21 +138,6 @@ describe("AddDescriptionDialog", () => {
         text: "PPID\tDESC\nX1\tnote",
         html,
       });
-    });
-
-    it("pasting clears a previously selected file, and selecting a file clears a previous paste", async () => {
-      render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[]} onMerged={vi.fn()} />);
-      const file = new File(["dummy"], "descriptions.xlsx", {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-
-      const input = document.body.querySelector('input[type="file"]') as HTMLInputElement;
-      fireEvent.change(input, { target: { files: [file] } });
-      await screen.findByText("descriptions.xlsx");
-
-      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nX1\tnote");
-      expect(screen.queryByText("descriptions.xlsx")).not.toBeInTheDocument();
-      expect(screen.getByText("Clipboard Loaded")).toBeInTheDocument();
     });
   });
 
@@ -170,7 +148,7 @@ describe("AddDescriptionDialog", () => {
       );
       render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[{ PPID: "X1" }]} onMerged={vi.fn()} />);
 
-      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\nX1");
+      pasteInto(pasteTextarea(), "PPID\nX1");
       fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
 
       await screen.findByText(/missing required column/);
@@ -185,7 +163,7 @@ describe("AddDescriptionDialog", () => {
       );
       render(<AddDescriptionDialog open={true} onClose={vi.fn()} baseRows={[{ PPID: "AB000010_1" }]} onMerged={vi.fn()} />);
 
-      pasteInto(screen.getByPlaceholderText(/paste ppid\/desc data/i), "PPID\tDESC\nAB000010_1\ta\nAB000010_1\tb");
+      pasteInto(pasteTextarea(), "PPID\tDESC\nAB000010_1\ta\nAB000010_1\tb");
       fireEvent.click(screen.getByRole("button", { name: /^add description$/i }));
 
       // The duplicate-PPID list is expected inline (existing V1.06 UX,
