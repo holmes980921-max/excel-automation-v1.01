@@ -23,8 +23,8 @@ team's internal server access is still ~1 month out, ahead of a planned V2.0 Ser
 - See [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for the full migration writeup, behavioral-
   parity regression results against the V1.09 Python engine, and known limitations.
 
-**Current version: V1.10 - Browser Edition** (see the in-app **About** dialog for live version/
-build info)
+**Current version: V1.12 - Film Material Visualization** (see the in-app **About** dialog for live
+version/build info)
 
 ## Quick Start
 
@@ -46,6 +46,26 @@ case you need to compare behavior against it (V1.10's regression suite already d
 automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 
 ## Features
+
+### Film Material Visualization (V1.12)
+- **Click a `filmmaterial` value in the result table** to see its layer structure visualized
+  TOP to BOTTOM in a modal - each parsed Material Code rendered as a fixed-size, colored,
+  black-bordered layer. Hovering a `filmmaterial` cell shows a pointer cursor; the value's Material
+  DB color fills the layer background, with automatic black/white text for contrast.
+- **Material DB is a plain, administrator-editable CSV** -
+  [`frontend/public/data/material-db.csv`](./frontend/public/data/material-db.csv) (`Material
+  Code,Color`) - no Material/color mapping is hard-coded in application code. Colors accept HEX
+  (`#8E44AD`) or standard CSS color names (`purple`). Duplicate Material Codes are a validation
+  error; duplicate colors across different codes are fine.
+- **Longest Match First parsing** correctly tokenizes multi-character Material Codes (e.g. `AB`)
+  out of a structure string like `ABCDBA` as `AB, C, D, B, A`, not `A, B, C, D, B, A` - see
+  [`frontend/lib/filmMaterialParser.ts`](./frontend/lib/filmMaterialParser.ts).
+- **Isolated by design**: a missing, unreadable, or invalid Material DB disables Visualization
+  only - Excel conversion, Add Description, and every other V1.11 feature are completely
+  unaffected. An unrecognized Material Code in a specific value shows a clear "Unknown Material"
+  error for that value rather than an incorrect diagram.
+- See [CODE_REVIEW_V1.12.md](./CODE_REVIEW_V1.12.md) for the full assessment, including a
+  disclosed spec-ambiguity resolution in the required test cases.
 
 ### User Guide & Support (V1.11)
 - **Help & Support** - a toolbar button (always visible, including from the Home screen) opens
@@ -245,7 +265,7 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Frontend (Vitest, 170 tests) - the only test suite that matters for this branch
+# Frontend (Vitest, 225 tests) - the only test suite that matters for this branch
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
 npm run lint
@@ -569,6 +589,7 @@ excel-automation-v1.01/
 ├── CODE_REVIEW_V1.09.md            # V1.09 review + score (Home reset fix, Remove/Clear, Error Log, Release Notes)
 ├── CODE_REVIEW_V1.10.md            # V1.10 review + score (Browser Edition migration, JS/Python parity regression)
 ├── CODE_REVIEW_V1.11.md            # V1.11 review + score (Help & Support, Error Details privacy gating)
+├── CODE_REVIEW_V1.12.md            # V1.12 review + score (Film Material Visualization, Longest Match First parsing)
 ├── backend/                        # Preserved V1.09 Python/FastAPI implementation - not used by this branch's
 │                                    # running app; kept only as the source of truth for the regression fixtures
 │                                    # in frontend/lib/converter/__fixtures__/ (see Architecture above)
@@ -618,15 +639,21 @@ excel-automation-v1.01/
     │   ├── ReturnHomeDialog.tsx       # V1.07: confirm before discarding an active session via Home
     │   ├── AbortConfirmDialog.tsx     # V1.07: confirm before cancelling an in-flight conversion
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
-    │   └── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices)
+    │   ├── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices);
+    │   │                              #   V1.12: filmmaterial cells get a pointer cursor + onFilmMaterialClick wiring
+    │   └── FilmMaterialVisualizationDialog.tsx  # V1.12: TOP->BOTTOM layer modal, Material DB colors, error states
     ├── public/docs/                  # V1.11: Help & Support content - plain Markdown, editable on GitHub,
     │   ├── USER_GUIDE.md              #   no React/TypeScript involved, served as-is by the static export
     │   ├── FAQ.md                     #   (## headings become individual FAQ accordion entries - lib/faqParser.ts)
     │   └── TROUBLESHOOTING.md
+    ├── public/data/material-db.csv    # V1.12: administrator-editable Material Code -> Color mapping (CSV, 2 columns)
     ├── lib/
     │   ├── api.ts                     # V1.10: local-engine client (was a FastAPI fetch client through V1.09) - same public interface
     │   ├── docsLoader.ts              # V1.11: fetches a public/docs/*.md file, basePath-aware
     │   ├── faqParser.ts               # V1.11: splits FAQ.md's ## headings into individual Q&A entries
+    │   ├── materialDb.ts              # V1.12: fetches/parses/validates material-db.csv, cached (no reload button needed)
+    │   ├── filmMaterialParser.ts      # V1.12: Longest Match First tokenizer + TOP->BOTTOM/explicit-Si-bottom logic
+    │   ├── cssColor.ts                # V1.12: HEX/CSS-name color validation + black/white contrast text picker
     │   ├── converter/                 # V1.10: the local conversion engine - see Architecture above
     │   │   ├── constants.ts           # Port of backend/app/models/constants.py
     │   │   ├── transformer.ts         # Port of backend/app/services/excel_transformer.py
@@ -652,7 +679,7 @@ excel-automation-v1.01/
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
     ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
     ├── next.config.mjs                # V1.10: output: "export" + basePath for GitHub Pages; V1.11: NEXT_PUBLIC_BASE_PATH for docsLoader.ts
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 170 tests
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 225 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -712,12 +739,19 @@ concerns independent and separately testable.
   V1.09 gap); Abort now genuinely cancels an in-progress conversion. The V1.09 Python/FastAPI
   implementation is preserved unchanged on `release/v1.09`. See
   [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) and [CHANGELOG.md](./CHANGELOG.md).
-- **V1.11 (this branch)** - User Guide & Support: a **Help & Support** dialog (User Guide, FAQ,
-  Troubleshooting, Error Details) sourced from editable Markdown under `frontend/public/docs/`;
-  **Show Details** extended to everyday Convert/Add Description failures, not just full-page
-  crashes, with a privacy gate that withholds it for validation errors whose message already
-  reflects the user's own data. No conversion logic changed. See
-  [CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.11** - User Guide & Support: a **Help & Support** dialog (User Guide, FAQ, Troubleshooting,
+  Error Details) sourced from editable Markdown under `frontend/public/docs/`; **Show Details**
+  extended to everyday Convert/Add Description failures, not just full-page crashes, with a
+  privacy gate that withholds it for validation errors whose message already reflects the user's
+  own data. No conversion logic changed. See [CODE_REVIEW_V1.11.md](./CODE_REVIEW_V1.11.md) and
+  [CHANGELOG.md](./CHANGELOG.md).
+- **V1.12 (this branch)** - Film Material Visualization: click a `filmmaterial` value to see its
+  layer structure TOP to BOTTOM, colored per an administrator-editable
+  [`material-db.csv`](./frontend/public/data/material-db.csv) with automatic black/white text
+  contrast. Parsing uses Longest Match First against the Material DB, correctly tokenizing
+  multi-character Material Codes; an unrecognized code shows a clear error instead of an incorrect
+  diagram. Fully isolated from Excel conversion - a Material DB problem disables Visualization
+  only. See [CODE_REVIEW_V1.12.md](./CODE_REVIEW_V1.12.md) and [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -788,3 +822,13 @@ changed this version except `worker.ts`/`workerClient.ts`/`api.ts`'s error-repor
 including the Python-vs-JS regression suite, passing unmodified). `HomeScreen.tsx`'s and
 `AddDescriptionDialog.tsx`'s Convert/Merge logic itself is unchanged; only their `catch` blocks
 gained a conditional "Show Details" trigger.
+
+**V1.12 (Film Material Visualization)**: `frontend/lib/converter/` (the conversion/rule/merge
+engine) was not touched at all this version - Film Material Visualization only *reads* an
+already-converted row's `FilmMaterial` value on click, via new, entirely separate modules
+(`materialDb.ts`, `filmMaterialParser.ts`, `cssColor.ts`) with no import relationship to
+`lib/converter/` in either direction. The one existing file touched for wiring is `ExcelGrid.tsx`
+(a new optional `onFilmMaterialClick` prop, defaulting to no-op when omitted - confirmed by a test
+that the grid doesn't throw or behave differently without it) and `app/page.tsx` (new dialog state,
+additive). The full pre-V1.12 test suite (180 tests) passes unmodified; Excel conversion, Add
+Description, and Help & Support were all re-verified working after this version's changes.

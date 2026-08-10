@@ -20,6 +20,21 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "V1.12",
+    date: "2026-08-10",
+    title: "Film Material Visualization",
+    new: [
+      "Click a filmmaterial value in the result table to see its layer structure, TOP to BOTTOM, with Material colors from an editable Material DB",
+      "Longest Match First parsing correctly handles multi-character Material Codes (e.g. 'AB') without misreading them as separate single-character layers",
+    ],
+    improved: [],
+    fixed: [],
+    knownIssues: [
+      "An unrecognized Material Code in the structure shows a clear error rather than an incorrect layer diagram - update material-db.csv to add it",
+      "A missing/invalid Material DB disables Visualization only - Excel conversion is unaffected",
+    ],
+  },
+  {
     version: "V1.11",
     date: "2026-08-10",
     title: "User Guide & Support",

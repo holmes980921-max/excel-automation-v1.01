@@ -3,6 +3,52 @@
 > Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
 > below for earlier versions use the name in effect at the time.
 
+## v1.12 - Film Material Visualization
+
+### Release Notes
+
+V1.12 adds a click-to-visualize feature for the `filmmaterial` column in the converted result
+table: clicking a value opens a modal showing its layer structure, parsed TOP to BOTTOM against an
+administrator-editable Material DB, with each layer colored and labeled by Material Code. The
+feature is fully additive and isolated - no Excel conversion, rule-shaping, or Add Description
+logic changed, and a missing/invalid Material DB disables Visualization only, never the rest of
+the app. Full detail: [CODE_REVIEW_V1.12.md](./CODE_REVIEW_V1.12.md).
+
+### Added
+- **Film Material Visualization modal** (`FilmMaterialVisualizationDialog.tsx`) - opens on a click
+  on any non-empty `filmmaterial` grid cell (`ExcelGrid.tsx` gained a pointer cursor + an optional
+  `onFilmMaterialClick` prop for this). Shows the source value, then TOP/BOTTOM labels around a
+  scrollable stack of fixed-width/fixed-height, black-bordered, Material-colored layers. Closes via
+  the × button, an outside click, or Esc (all three, per spec).
+- **Material DB** (`frontend/public/data/material-db.csv`, `Material Code,Color`) - the sole
+  source of the Material/color mapping; no hard-coded colors in application code. Loaded once and
+  cached (`lib/materialDb.ts`); validated on load for duplicate Material Codes and invalid colors,
+  with distinct error messages for "the file is unreadable" (Material Database Unavailable) vs.
+  "the file loaded but its content is wrong" (Material Database Error).
+- **Longest Match First parser** (`lib/filmMaterialParser.ts`) - tokenizes a Material Structure
+  string against the DB's known codes, longest first, so a multi-character code like `AB` is never
+  misread as separate `A` + `B` layers. Determines the Bottom layer per spec: the field immediately
+  after the structure is an explicit Bottom only if it's a registered Material Code, otherwise
+  Bottom defaults to `Si`. An unrecognized character anywhere in the structure produces a clean
+  "Unknown Material" error - never a partial or guessed layer diagram.
+- **Color validation + contrast** (`lib/cssColor.ts`) - accepts HEX (`#RGB`/`#RRGGBB`) and the full
+  CSS3 extended color-keyword set (147 names, e.g. `purple`), resolved via a fixed lookup table
+  (not DOM/browser color-serialization behavior, which isn't reliably consistent across engines).
+  Background/text contrast uses the standard YIQ perceived-brightness heuristic.
+- 45 new tests across `cssColor.test.ts`, `materialDb.test.ts`, `filmMaterialParser.test.ts`
+  (including all 5 spec-required cases plus additional edge cases), `FilmMaterialVisualizationDialog.
+  test.tsx`, and `ExcelGrid.test.tsx` (the latter a first dedicated test file for that component).
+
+### Known limitations (disclosed, not fixed this version)
+- Spec's five required test cases contain an internal inconsistency between Case 1 (expects `ABC`
+  to tokenize as `A,B,C`) and the shared mock Material DB used everywhere else (which registers
+  `AB` as a 2-character code, so `ABC` correctly tokenizes as `AB,C` under Longest Match First -
+  the same rule Case 2 explicitly tests and requires). Resolved by giving Case 1 its own DB fixture
+  without `AB`, since Case 1's stated purpose is testing basic parsing + default-Si-bottom in
+  isolation, not Longest Match First (which Case 2 owns) - see CODE_REVIEW_V1.12.md.
+- No live-browser interactive verification in this environment (no browser automation tool
+  available) - covered instead by component tests (RTL/jsdom) and a local dev-server boot check.
+
 ## v1.11 - User Guide & Support
 
 ### Release Notes
