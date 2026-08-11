@@ -17,8 +17,25 @@ export const BASE_COLUMNS = [
   "CorrelationCard_2",
   "CorrelationCard_3",
   "DataCombination",
+  "PreProcess",
   "DataFeedFoward",
+  "ReferenceTestPathName",
 ] as const;
+
+/**
+ * V1.14: default user-facing display names for two fields whose internal
+ * name matches the RCC source field exactly (`TS#N_PreProcess`,
+ * `TS#N_ReferenceTestPathName` - see lib/converter/transformer.ts's generic
+ * TS# matching, which needs no changes because of this). The Converted
+ * Excel is a human-readable final result, not a machine-import file, so
+ * these two are shown under shorter, friendlier names by default - a rule
+ * can still override them further via its own `aliases`, exactly like any
+ * other column (see resolveDisplayColumns below).
+ */
+export const DEFAULT_COLUMN_HEADERS: Record<string, string> = {
+  PreProcess: "CB-Pre-PPID",
+  ReferenceTestPathName: "DFF-Pre-PPID",
+};
 
 export type TransformationRule = {
   id: string;
@@ -161,5 +178,8 @@ export function resolveDisplayColumns(rule: TransformationRule): { field: string
     if (!ordered.includes(c)) ordered.push(c);
   }
 
-  return ordered.map((field) => ({ field, header: rule.aliases[field]?.trim() || field }));
+  return ordered.map((field) => ({
+    field,
+    header: rule.aliases[field]?.trim() || DEFAULT_COLUMN_HEADERS[field] || field,
+  }));
 }

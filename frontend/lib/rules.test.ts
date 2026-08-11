@@ -9,10 +9,53 @@ import {
 } from "./rules";
 
 describe("resolveDisplayColumns", () => {
-  it("returns all 9 base columns, no aliases, for the default rule", () => {
+  it("returns all 11 base columns for the default rule, header equal to field except the two V1.14 renamed columns", () => {
     const cols = resolveDisplayColumns(DEFAULT_RULE);
-    expect(cols).toHaveLength(9);
-    expect(cols.every((c) => c.field === c.header)).toBe(true);
+    expect(cols).toHaveLength(11);
+    const renamed = new Set(["PreProcess", "ReferenceTestPathName"]);
+    expect(cols.every((c) => renamed.has(c.field) || c.field === c.header)).toBe(true);
+  });
+
+  it("V1.14: final output column order and headers exactly match the spec (Test 8)", () => {
+    const cols = resolveDisplayColumns(DEFAULT_RULE);
+    expect(cols.map((c) => c.field)).toEqual([
+      "PPID",
+      "TS#",
+      "CardName",
+      "FilmMaterial",
+      "CorrelationCard_1",
+      "CorrelationCard_2",
+      "CorrelationCard_3",
+      "DataCombination",
+      "PreProcess",
+      "DataFeedFoward",
+      "ReferenceTestPathName",
+    ]);
+    expect(cols.map((c) => c.header)).toEqual([
+      "PPID",
+      "TS#",
+      "CardName",
+      "FilmMaterial",
+      "CorrelationCard_1",
+      "CorrelationCard_2",
+      "CorrelationCard_3",
+      "DataCombination",
+      "CB-Pre-PPID",
+      "DataFeedFoward",
+      "DFF-Pre-PPID",
+    ]);
+  });
+
+  it("V1.14: an explicit alias still overrides the default CB-Pre-PPID/DFF-Pre-PPID header", () => {
+    const rule: TransformationRule = {
+      id: "z2",
+      rule_name: "Custom",
+      output_columns: ["PPID", "PreProcess"],
+      column_order: ["PPID", "PreProcess"],
+      aliases: { PreProcess: "My Custom Header" },
+    };
+    const cols = resolveDisplayColumns(rule);
+    expect(cols.find((c) => c.field === "PreProcess")?.header).toBe("My Custom Header");
   });
 
   it("respects custom order and aliases", () => {
@@ -31,12 +74,12 @@ describe("resolveDisplayColumns", () => {
 
   it("falls back to the full column set when nothing is enabled", () => {
     const rule: TransformationRule = { id: "y", rule_name: "Empty", output_columns: [], column_order: [], aliases: {} };
-    expect(resolveDisplayColumns(rule)).toHaveLength(9);
+    expect(resolveDisplayColumns(rule)).toHaveLength(11);
   });
 });
 
 describe("normalizeForEditing", () => {
-  it("fills column_order out to all 9 base columns", () => {
+  it("fills column_order out to all 11 base columns", () => {
     const partial: TransformationRule = {
       id: "z",
       rule_name: "Partial",
@@ -44,7 +87,7 @@ describe("normalizeForEditing", () => {
       column_order: ["PPID"],
       aliases: {},
     };
-    expect(normalizeForEditing(partial).column_order).toHaveLength(9);
+    expect(normalizeForEditing(partial).column_order).toHaveLength(11);
   });
 });
 
