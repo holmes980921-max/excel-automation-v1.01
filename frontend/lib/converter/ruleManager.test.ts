@@ -6,10 +6,30 @@ import { DEFAULT_RULE, type TransformationRule } from "@/lib/rules";
 // Mirrors backend/tests/test_rule_manager.py.
 
 describe("applyRule", () => {
-  it("reproduces the full unshaped column set for the Default rule", () => {
+  it("reproduces the full unshaped column set for the Default rule, with the V1.14 default header overrides applied", () => {
     const shaped = applyRule(FULL_OUTPUT_COLUMNS, DEFAULT_RULE);
     expect(shaped.fields).toEqual(FULL_OUTPUT_COLUMNS);
-    expect(shaped.headers).toEqual(FULL_OUTPUT_COLUMNS);
+    expect(shaped.headers).toEqual(
+      FULL_OUTPUT_COLUMNS.map((f) => (f === "PreProcess" ? "CB-Pre-PPID" : f === "ReferenceTestPathName" ? "DFF-Pre-PPID" : f))
+    );
+  });
+
+  it("V1.14: exports PreProcess/ReferenceTestPathName under their CB-Pre-PPID/DFF-Pre-PPID headers unless aliased", () => {
+    const shaped = applyRule(FULL_OUTPUT_COLUMNS, DEFAULT_RULE);
+    const preIdx = shaped.fields.indexOf("PreProcess");
+    const refIdx = shaped.fields.indexOf("ReferenceTestPathName");
+    expect(shaped.headers[preIdx]).toBe("CB-Pre-PPID");
+    expect(shaped.headers[refIdx]).toBe("DFF-Pre-PPID");
+
+    const aliased: TransformationRule = {
+      id: "custom",
+      rule_name: "Custom",
+      output_columns: ["PPID", "PreProcess"],
+      column_order: ["PPID", "PreProcess"],
+      aliases: { PreProcess: "Custom Header" },
+    };
+    const shapedAliased = applyRule(FULL_OUTPUT_COLUMNS, aliased);
+    expect(shapedAliased.headers[shapedAliased.fields.indexOf("PreProcess")]).toBe("Custom Header");
   });
 
   it("falls back to Default when no rule is given", () => {

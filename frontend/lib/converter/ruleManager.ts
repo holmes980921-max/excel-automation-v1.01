@@ -10,7 +10,7 @@
  */
 
 import { FULL_OUTPUT_COLUMNS } from "./constants";
-import { DEFAULT_RULE, type TransformationRule } from "@/lib/rules";
+import { DEFAULT_RULE, DEFAULT_COLUMN_HEADERS, type TransformationRule } from "@/lib/rules";
 
 export type ShapedTable = {
   fields: string[];
@@ -53,6 +53,10 @@ export function applyRule(
   const normalized = validateRule(rule);
   const availableSet = new Set(availableColumns);
   const orderedColumns = normalized.column_order.filter((c) => availableSet.has(c));
-  const headers = orderedColumns.map((c) => normalized.aliases[c] ?? c);
+  // V1.14: same default-header fallback as lib/rules.ts's
+  // resolveDisplayColumns (kept in sync manually - this file is already a
+  // deliberate, documented duplication of that preview-side shaping for
+  // export-time authoritative shaping, see this file's header comment).
+  const headers = orderedColumns.map((c) => normalized.aliases[c] ?? DEFAULT_COLUMN_HEADERS[c] ?? c);
   return { fields: orderedColumns, headers };
 }
