@@ -23,8 +23,8 @@ team's internal server access is still ~1 month out, ahead of a planned V2.0 Ser
 - See [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for the full migration writeup, behavioral-
   parity regression results against the V1.09 Python engine, and known limitations.
 
-**Current version: V1.13 - Clipboard-Only Input UX & Documentation Update** (see the in-app
-**About** dialog for live version/build info)
+**Current version: V1.14 - Pre-PPID Data Extraction & User-Friendly Converted Output** (see the
+in-app **About** dialog for live version/build info)
 
 ## Quick Start
 
@@ -46,6 +46,34 @@ case you need to compare behavior against it (V1.10's regression suite already d
 automatically - see [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md)).
 
 ## Features
+
+### Pre-PPID Data Extraction & User-Friendly Converted Output (V1.14)
+- **Two new Converted Output columns**, sourced from RCC's `TS#N_PreProcess`/
+  `TS#N_ReferenceTestPathName` fields using the exact same TS#-matching logic as every other field
+  (`CorrelationCard_1/2/3`, `DataCombination`, `DataFeedFoward`) - no parallel matching system was
+  built. Shown under shorter, human-friendly names rather than the longer RCC technical ones:
+  `PreProcess` -> **`CB-Pre-PPID`**, `ReferenceTestPathName` -> **`DFF-Pre-PPID`**. The final output
+  is exactly 11 columns, in order: `PPID, TS#, CardName, FilmMaterial, CorrelationCard_1,
+  CorrelationCard_2, CorrelationCard_3, DataCombination, CB-Pre-PPID, DataFeedFoward,
+  DFF-Pre-PPID`.
+- **Last-backslash Value extraction** - the only genuinely new transformation logic this version
+  adds. A matched value like `%%%%\PROCESS\QWEDWQASJ_2` becomes `QWEDWQASJ_2` (text after the last
+  `\` only); a value with no `\` is left completely unchanged. Applies only to these two fields -
+  every other column's processing is untouched.
+- **Missing-field behavior is identical to every existing TS#-based field**: no matching
+  `TS#N_PreProcess`/`TS#N_ReferenceTestPathName` for a row's TS# simply shows `-`, exactly like a
+  missing `CorrelationCard_1` always has.
+  Missing PreProcess/ReferenceTestPathName never fails the whole conversion.
+- **`CB-Pre-PPID`/`DFF-Pre-PPID` never wrap onto a second line** in the Preview grid - both a
+  wider default column width and a small, general CSS fix (the shipped AG Grid stylesheet had no
+  `white-space: nowrap` on header text at all, a real gap found while implementing this, not a
+  hypothetical one) address this; existing columns' widths are untouched.
+- **Reuses, not duplicates**: `BASE_COLUMNS` in `lib/rules.ts` remains the single source of truth
+  for which fields exist (extending it is the only change `lib/converter/transformer.ts`'s TS#
+  matching needed); a new `DEFAULT_COLUMN_HEADERS` map (also in `lib/rules.ts`) is reused by both
+  the Preview grid's column-shaping and the exported `.xlsx`'s header-shaping, exactly like every
+  other alias is already shared between those two paths. The Rule Editor needed no changes.
+  See [CODE_REVIEW_V1.14.md](./CODE_REVIEW_V1.14.md) for the full assessment.
 
 ### Clipboard-Only Input UX & Documentation Update (V1.13, finalized in V1.13.1)
 - **Clipboard Paste is the only input method for both Conversion Input and Add Description** -
@@ -289,14 +317,14 @@ All three are plain PowerShell (with a `.bat` double-click wrapper) - no extra t
 ### Running the test suites
 
 ```bash
-# Frontend (Vitest, 237 tests) - the only test suite that matters for this branch
+# Frontend (Vitest, 255 tests) - the only test suite that matters for this branch
 cd frontend
 npm test                                                            # or: npx vitest run --coverage
 npm run lint
 npx tsc --noEmit
 ```
 
-Included in those 237: a dedicated `lib/converter/regression.test.ts` that loads real fixture
+Included in those 255: a dedicated `lib/converter/regression.test.ts` that loads real fixture
 files and compares the JS engine's output field-for-field against a JSON snapshot produced by the
 actual Python V1.09 engine - see [Architecture](#architecture) and
 [CODE_REVIEW_V1.10.md](./CODE_REVIEW_V1.10.md) for how this is generated/verified.
@@ -354,8 +382,11 @@ Prints and saves timing/memory/throughput as `scripts/bench_result_<label>.json`
    toolbar button - nothing about the feature itself changed, it's just not shown until asked for.
 1. Click **Transformation Rules** in the toolbar to open/close the rule panel (open by default).
 2. Pick a rule from the dropdown at the top of the panel, or start from **Default**.
-3. For each of the 9 columns: check/uncheck to include/exclude, drag the handle (⋮⋮) to reorder,
-   type into the alias field to change its displayed/exported header.
+3. For each of the 11 columns: check/uncheck to include/exclude, drag the handle (⋮⋮) to reorder,
+   type into the alias field to change its displayed/exported header. `PreProcess` and
+   `ReferenceTestPathName` show their internal (RCC-matching) name here, same as every other
+   column - their default displayed/exported header (`CB-Pre-PPID`/`DFF-Pre-PPID`, V1.14) still
+   applies until you type your own alias.
 4. The Preview grid and the row/column counts in the status bar update instantly as you edit.
 5. **Save As** a new rule, **Update** the current one, **Delete** it, or **Reset to Default**.
 6. **Export**/**Import** a rule as `.json` to share it with a teammate.
@@ -466,7 +497,7 @@ new version.
 | Field | Type | Meaning |
 |---|---|---|
 | `rule_name` | string | Display name for the rule. |
-| `output_columns` | string[] | Which internal columns are **enabled** (a set - order doesn't matter here). Valid values: `PPID`, `TS#`, `CardName`, `FilmMaterial`, `CorrelationCard_1`, `CorrelationCard_2`, `CorrelationCard_3`, `DataCombination`, `DataFeedFoward`. |
+| `output_columns` | string[] | Which internal columns are **enabled** (a set - order doesn't matter here). Valid values: `PPID`, `TS#`, `CardName`, `FilmMaterial`, `CorrelationCard_1`, `CorrelationCard_2`, `CorrelationCard_3`, `DataCombination`, `PreProcess`, `DataFeedFoward`, `ReferenceTestPathName`. `PreProcess`/`ReferenceTestPathName` are internal names (matching their RCC source field) - their default displayed/exported header is `CB-Pre-PPID`/`DFF-Pre-PPID` (V1.14) unless `aliases` overrides it. |
 | `column_order` | string[] | Final display/export **order**. Only entries also present in `output_columns` are shown; a column in `output_columns` but missing from `column_order` is appended at the end. |
 | `aliases` | object | `internal_name -> display_header`. Only affects the header text shown/exported - never the internal field name. |
 
@@ -612,6 +643,7 @@ excel-automation-v1.01/
 ├── CODE_REVIEW_V1.11.md            # V1.11 review + score (Help & Support, Error Details privacy gating)
 ├── CODE_REVIEW_V1.12.md            # V1.12 review + score (Film Material Visualization, Longest Match First parsing)
 ├── CODE_REVIEW_V1.13.md            # V1.13 review + score (Clipboard-only input UX, docs update, Film Material hover)
+├── CODE_REVIEW_V1.14.md            # V1.14 review + score (PreProcess/ReferenceTestPathName, last-backslash extraction)
 ├── backend/                        # Preserved V1.09 Python/FastAPI implementation - not used by this branch's
 │                                    # running app; kept only as the source of truth for the regression fixtures
 │                                    # in frontend/lib/converter/__fixtures__/ (see Architecture above)
@@ -662,7 +694,8 @@ excel-automation-v1.01/
     │   ├── AbortConfirmDialog.tsx     # V1.07: confirm before cancelling an in-flight conversion
     │   ├── RuleEditor.tsx             # Column select/reorder (dnd-kit)/alias/save/update/delete/import/export
     │   ├── ExcelGrid.tsx              # AG Grid preview - renders whatever rows/columns it's given (caller filters/slices);
-    │   │                              #   V1.12: filmmaterial cells get a pointer cursor + onFilmMaterialClick wiring
+    │   │                              #   V1.12: filmmaterial cells get a pointer cursor + onFilmMaterialClick wiring;
+    │   │                              #   V1.14: COLUMN_MIN_WIDTH_OVERRIDES for CB-Pre-PPID/DFF-Pre-PPID
     │   └── FilmMaterialVisualizationDialog.tsx  # V1.12: TOP->BOTTOM layer modal, Material DB colors, error states
     ├── public/docs/                  # V1.11: Help & Support content - plain Markdown, editable on GitHub,
     │   ├── USER_GUIDE.md              #   no React/TypeScript involved, served as-is by the static export
@@ -678,8 +711,9 @@ excel-automation-v1.01/
     │   ├── cssColor.ts                # V1.12: HEX/CSS-name color validation + black/white contrast text picker
     │   ├── converter/                 # V1.10: the local conversion engine - see Architecture above
     │   │   ├── constants.ts           # Port of backend/app/models/constants.py
-    │   │   ├── transformer.ts         # Port of backend/app/services/excel_transformer.py
-    │   │   ├── ruleManager.ts         # Port of backend/app/services/rule_manager.py
+    │   │   ├── transformer.ts         # Port of backend/app/services/excel_transformer.py; V1.14: applies lastPathSegment.ts
+    │   │   ├── lastPathSegment.ts     # V1.14: last-backslash Value extraction for PreProcess/ReferenceTestPathName
+    │   │   ├── ruleManager.ts         # Port of backend/app/services/rule_manager.py; V1.14: DEFAULT_COLUMN_HEADERS fallback
     │   │   ├── descriptionMerger.ts   # Port of backend/app/services/description_merger.py
     │   │   ├── dfHelpers.ts           # Port of backend/app/utils/df_helpers.py
     │   │   ├── excelIO.ts             # Port of backend/app/utils/excel_io.py (SheetJS + DOMParser instead of pandas)
@@ -690,7 +724,8 @@ excel-automation-v1.01/
     │   │   ├── regression.test.ts     # V1.09 (Python) vs V1.10 (JS) field-for-field parity, real fixture files
     │   │   └── __fixtures__/          # Real .xls/.xlsx files + Python-generated *.expected.json snapshots
     │   ├── naturalCompare.ts          # Shared natural-sort comparator (used by AG Grid column sort)
-    │   ├── rules.ts                   # TransformationRule type, localStorage persistence, shaping helpers
+    │   ├── rules.ts                   # TransformationRule type, localStorage persistence, shaping helpers;
+    │   │                              #   V1.14: BASE_COLUMNS + DEFAULT_COLUMN_HEADERS (CB-Pre-PPID/DFF-Pre-PPID)
     │   ├── uploadValidation.ts        # Pure file-rejection-message logic (extracted for testability)
     │   ├── searchFilter.ts            # V1.06: pure row-search predicate (search always runs on the full dataset)
     │   ├── filename.ts                # V1.06: default save filename (RCC_converted_YYMMDD_HHMMSS.xlsx)
@@ -701,7 +736,7 @@ excel-automation-v1.01/
     ├── types/file-system-access.d.ts  # V1.06: ambient types for showSaveFilePicker (Save As)
     ├── eslint.config.mjs              # V1.08: flat ESLint config (next/core-web-vitals + next/typescript)
     ├── next.config.mjs                # V1.10: output: "export" + basePath for GitHub Pages; V1.11: NEXT_PUBLIC_BASE_PATH for docsLoader.ts
-    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 237 tests
+    └── vitest.config.mts, vitest.setup.ts  # Vitest suite (run: npm test) - 255 tests
 ```
 
 Architecture: **Frontend → API → Rule Manager → Transformation Engine → Excel Export.**
@@ -780,7 +815,7 @@ concerns independent and separately testable.
   Description gained a light example-format guide; User Guide/FAQ/Troubleshooting rewritten for
   the clipboard-only workflow; Film Material cells gained a subtle hover affordance. See
   [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) and [CHANGELOG.md](./CHANGELOG.md).
-- **V1.13.1 (this branch)** - Follow-up fix, finalizing V1.13's clipboard-only mandate: removed the
+- **V1.13.1** - Follow-up fix, finalizing V1.13's clipboard-only mandate: removed the
   page-level "How to get your data" guide as redundant with the paste-area placeholder; **Add
   Description also became Clipboard Paste only** (Upload/Drag & Drop removed, matching Conversion
   Input); Add Description's example format moved from a permanent block into its own paste-area
@@ -788,6 +823,16 @@ concerns independent and separately testable.
   PPID-matching behavior, Error Details, Film Material Visualization, and Material DB are
   unchanged - only Add Description's *input method* changed. See
   [CODE_REVIEW_V1.13.md](./CODE_REVIEW_V1.13.md) and [CHANGELOG.md](./CHANGELOG.md).
+- **V1.14 (this branch)** - Pre-PPID Data Extraction & User-Friendly Converted Output: two new
+  columns, `PreProcess`/`ReferenceTestPathName` (from RCC's `TS#N_PreProcess`/
+  `TS#N_ReferenceTestPathName`), matched using the exact same TS# logic every other field already
+  used - no new matching system. Shown as `CB-Pre-PPID`/`DFF-Pre-PPID` in the final 11-column
+  output; values with a `\` show only the text after the last one, values without one are
+  unchanged. Missing fields still show `-`, same as any existing field. The Rule Editor needed no
+  changes - both the mapping (`BASE_COLUMNS`) and the default display names
+  (`DEFAULT_COLUMN_HEADERS`) live in the existing centralized `lib/rules.ts`, reused by both the
+  Preview grid and the exported `.xlsx`. See [CODE_REVIEW_V1.14.md](./CODE_REVIEW_V1.14.md) and
+  [CHANGELOG.md](./CHANGELOG.md).
 
 ## Backward compatibility
 
@@ -900,3 +945,23 @@ assertions; no test covering Excel conversion, Add Description's matching logic,
 Film Material Visualization, or the Material DB was altered or removed. Net test count is unchanged
 at 237 (the composition shifted: HomeScreen.test.tsx and AddDescriptionDialog.test.tsx each removed
 and added an equal number of tests).
+
+**V1.14 (Pre-PPID Data Extraction & User-Friendly Converted Output)**: `lib/converter/transformer.
+ts`'s TS# matching loop is unchanged - it already iterated `OUTPUT_COLUMNS` generically, so it
+required zero changes to start picking up `TS#N_PreProcess`/`TS#N_ReferenceTestPathName`; the only
+line added to its per-column loop is the last-backslash extraction call, scoped to exactly the two
+new fields via `lastPathSegment.ts`'s `LAST_SEGMENT_FIELDS` set. `lib/converter/ruleManager.ts` and
+`lib/rules.ts` each gained one new fallback line (`DEFAULT_COLUMN_HEADERS[field]`) in their
+existing header-resolution logic - both already existed for user-set aliases, so this only extends
+what was already there rather than adding a new code path. `RuleEditor.tsx` was not touched at
+all - the two new fields flow through its existing generic column-list rendering with no special
+casing needed. The Python V1.09 backend (`backend/`) was not touched, and per its own established
+policy is not expected to gain these fields - `lib/converter/regression.test.ts`'s Python-parity
+loop was narrowed to the columns both engines actually share (`PYTHON_COMPARABLE_COLUMNS`), with a
+new, separate assertion confirming the two new columns are present and consistently `MISSING_VALUE`
+on the real (Python-generated) fixtures, which predate these fields and have no such source data.
+255 tests total (up from 237, 18 new) - no existing test covering Excel conversion parity, Add
+Description, Error Details, Film Material Visualization, or the Material DB was weakened or
+removed; the tests that changed are the ones whose literal expectations depended on the exact
+column count/header set (`rules.test.ts`, `ruleManager.test.ts`) or the exact Python-comparison
+scope (`regression.test.ts`), updated to the new, correct 11-column reality rather than loosened.

@@ -3,6 +3,58 @@
 > Renamed from "Excel Automation" to "**RCC Excel Automation**" in v1.09 (branding only). Entries
 > below for earlier versions use the name in effect at the time.
 
+## v1.14 - Pre-PPID Data Extraction & User-Friendly Converted Output
+
+### Release Notes
+
+V1.14 adds two new Converted Output columns - `PreProcess` and `ReferenceTestPathName`, sourced
+from RCC's `TS#N_PreProcess`/`TS#N_ReferenceTestPathName` fields - using the exact same TS#
+matching logic every other field (`CorrelationCard_1/2/3`, `DataCombination`, `DataFeedFoward`)
+already used; no parallel matching system was built. The only genuinely new transformation logic
+is a last-backslash Value extraction (`%%%%\PROCESS\QWEDWQASJ_2` -> `QWEDWQASJ_2`), scoped to
+exactly these two fields. The final Converted Output is now 11 columns, with the two new ones
+shown under shorter, human-facing names (`CB-Pre-PPID`, `DFF-Pre-PPID`) rather than their longer
+RCC technical names - existing column names are unchanged. No conversion logic for any existing
+field changed, Add Description/Error Details/Film Material Visualization/Material DB are
+untouched, and the Rule Editor needed no changes. Full detail:
+[CODE_REVIEW_V1.14.md](./CODE_REVIEW_V1.14.md).
+
+### Added
+- **`PreProcess`/`ReferenceTestPathName` output columns** (`lib/rules.ts`'s `BASE_COLUMNS`) -
+  `lib/converter/transformer.ts`'s existing generic `TS#N_<field>` matching loop needed no code
+  change to start producing them; a matching row's TS# number is used exactly as it already is for
+  every other field.
+- **Last-backslash Value extraction** (`lib/converter/lastPathSegment.ts`, new) - applied only to
+  `PreProcess`/`ReferenceTestPathName` inside `transformer.ts`'s per-column loop. A value
+  containing `\` keeps only the text after the last one; a value without `\` is left completely
+  unchanged. Handles backslash edge cases (trailing `\`, consecutive `\\`) without throwing, though
+  per spec these aren't expected in real RCC data.
+- **`DEFAULT_COLUMN_HEADERS`** (`lib/rules.ts`) - a small map from internal field name to a default
+  user-facing header (`PreProcess` -> `CB-Pre-PPID`, `ReferenceTestPathName` -> `DFF-Pre-PPID`),
+  used as a fallback in `resolveDisplayColumns` (Preview grid) and `ruleManager.ts`'s `applyRule`
+  (export), both of which already had a `field -> header` alias-resolution step this only extends.
+  A rule's own `aliases` still take priority, so a user can still rename these columns further via
+  the existing Rule Editor, unchanged.
+- **`COLUMN_MIN_WIDTH_OVERRIDES`** (`ExcelGrid.tsx`) plus a general `white-space: nowrap` fix for
+  AG Grid header text (`globals.css`) - the shipped AG Grid stylesheet's header-text CSS has
+  `word-break: break-word` with no `white-space: nowrap` at all (verified by grepping the actual
+  shipped CSS), so a long header can genuinely wrap without this; applied to every header, not just
+  the two new ones, since no existing header ever benefited from wrapping.
+- 18 new tests across `transformer.test.ts` (TS# matching + backslash extraction, all of the
+  spec's required test cases), `rules.test.ts`/`ruleManager.test.ts` (default header + explicit
+  alias override, exact 11-column output order), `regression.test.ts` (real-fixture sanity check),
+  `ExcelGrid.test.tsx`, and `globals.css.test.ts`.
+
+### Known limitations (disclosed, not fixed this version)
+- No live-browser interactive verification in this environment (no browser automation tool
+  available) - covered instead by component tests (RTL/jsdom) and, where jsdom can't measure real
+  layout (column pixel width, header wrapping), by reading the actual CSS source and the width
+  override values directly.
+- Existing user-saved custom Transformation Rules (localStorage, pre-V1.14) will not automatically
+  enable the two new columns - the Rule Editor's existing "append missing known columns, disabled
+  by default" behavior applies, same as it would for any future `BASE_COLUMNS` addition; a user
+  re-opening a custom rule can enable them manually. The Default Rule shows them immediately.
+
 ## v1.13.1 - Clipboard-Only Input UX Follow-up Fix
 
 ### Release Notes

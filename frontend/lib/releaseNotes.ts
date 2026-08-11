@@ -20,6 +20,22 @@ export type ReleaseNote = {
 
 export const RELEASE_NOTES: ReleaseNote[] = [
   {
+    version: "V1.14",
+    date: "2026-08-11",
+    title: "Pre-PPID Data Extraction & User-Friendly Converted Output",
+    new: [
+      "Two new Converted Output columns, CB-Pre-PPID and DFF-Pre-PPID, matched by TS# the same way as every existing field",
+      "Values containing a backslash now show only the text after the last one (e.g. \"%%%%\\PROCESS\\QWEDWQASJ_2\" -> \"QWEDWQASJ_2\")",
+    ],
+    improved: [
+      "The Converted Output is now 11 columns; missing CB-Pre-PPID/DFF-Pre-PPID values show \"-\", same as any other field",
+    ],
+    fixed: [],
+    knownIssues: [
+      "A Transformation Rule saved before V1.14 won't show the two new columns until you enable them in the Rule Editor - the Default rule shows them immediately",
+    ],
+  },
+  {
     version: "V1.13.1",
     date: "2026-08-11",
     title: "Clipboard-Only Input UX Follow-up Fix",
