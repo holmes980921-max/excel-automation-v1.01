@@ -57,6 +57,92 @@ describe("transform", () => {
   });
 });
 
+describe("transform - PreProcess/ReferenceTestPathName (V1.14)", () => {
+  it("maps TS#N_PreProcess with no backslash unchanged (Test 1/4)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#3_PreProcess", "PRE_PROCESS_01"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#3")!;
+    expect(row.PreProcess).toBe("PRE_PROCESS_01");
+  });
+
+  it("extracts only the text after the last backslash for PreProcess (Test 2)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#3_PreProcess", "%%%%\\%%\\%%%%\\QWEDWQASJ_2"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#3")!;
+    expect(row.PreProcess).toBe("QWEDWQASJ_2");
+  });
+
+  it("extracts only the text after the last backslash for ReferenceTestPathName (Test 3)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#3_ReferenceTestPathName", "AAAA\\BBBB\\PATH_003"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#3")!;
+    expect(row.ReferenceTestPathName).toBe("PATH_003");
+  });
+
+  it("uses the dash placeholder when PreProcess is missing for that TS# (Test 5)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#3_ReferenceTestPathName", "PATH_003"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#3")!;
+    expect(row.PreProcess).toBe("-");
+  });
+
+  it("uses the dash placeholder when ReferenceTestPathName is missing for that TS# (Test 6)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#3_PreProcess", "PRE_PROCESS_01"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#3")!;
+    expect(row.ReferenceTestPathName).toBe("-");
+  });
+
+  it("uses only the matching TS# block, never an adjacent one (Test 7)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#1_PreProcess", "PRE_1"],
+      ["P1", "TS#2_PreProcess", "PRE_2"],
+      ["P1", "TS#3_PreProcess", "PRE_3"],
+      ["P1", "TS#1_ReferenceTestPathName", "REF_1"],
+      ["P1", "TS#2_ReferenceTestPathName", "REF_2"],
+      ["P1", "TS#3_ReferenceTestPathName", "REF_3"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#2")!;
+    expect(row.PreProcess).toBe("PRE_2");
+    expect(row.ReferenceTestPathName).toBe("REF_2");
+  });
+
+  it("completes the end-to-end example from the spec (both fields, both with backslashes)", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#1_PreProcess", "IGNORED_1"],
+      ["P1", "TS#3_PreProcess", "%%%%\\PROCESS\\QWEDWQASJ_2"],
+      ["P1", "TS#1_ReferenceTestPathName", "IGNORED_1"],
+      ["P1", "TS#3_ReferenceTestPathName", "AAAA\\REFERENCE\\PATH_003"],
+    ]);
+    const row = rows.find((r) => r["TS#"] === "TS#3")!;
+    expect(row.PreProcess).toBe("QWEDWQASJ_2");
+    expect(row.ReferenceTestPathName).toBe("PATH_003");
+  });
+
+  it("does not throw on backslash edge cases not expected in real RCC data", () => {
+    const rows = transform([
+      ["P1", "PPID", "P1"],
+      ["P1", "TS#1_PreProcess", "TRAILING\\"],
+      ["P1", "TS#1_ReferenceTestPathName", "DOUBLE\\\\SLASH"],
+    ]);
+    const row = rows[0];
+    expect(row.PreProcess).toBe("");
+    expect(row.ReferenceTestPathName).toBe("SLASH");
+  });
+});
+
 describe("summarize", () => {
   it("reports ppid_count/ts_count/generated_rows and rounds elapsed time", () => {
     const rows = transform(SAMPLE_ROWS);

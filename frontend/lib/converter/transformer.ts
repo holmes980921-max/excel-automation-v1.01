@@ -23,6 +23,7 @@ import {
   OUTPUT_COLUMNS,
   TS_LABEL_PREFIX,
 } from "./constants";
+import { LAST_SEGMENT_FIELDS, extractLastPathSegment } from "./lastPathSegment";
 
 export type RawRow = [unknown, unknown, unknown];
 export type ConvertedRow = Record<string, unknown>;
@@ -88,7 +89,14 @@ export function transform(rows: RawRow[]): ConvertedRow[] {
         // Python's dict.get(col, MISSING_VALUE): a field that was present
         // in the source but genuinely blank stays blank/null, while a
         // field never mentioned at all becomes "-".
-        row[col] = col in fields ? fields[col] : MISSING_VALUE;
+        let value = col in fields ? fields[col] : MISSING_VALUE;
+        // V1.14: the only new transformation logic - PreProcess/
+        // ReferenceTestPathName get the last-backslash-segment extraction
+        // applied once the TS# match above has already found their value.
+        // MISSING_VALUE ("-") has no backslash, so this is a no-op for a
+        // genuinely missing field.
+        if (LAST_SEGMENT_FIELDS.has(col)) value = extractLastPathSegment(value);
+        row[col] = value;
       }
       result.push(row);
     }
