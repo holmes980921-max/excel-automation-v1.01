@@ -25,6 +25,24 @@ function isClickableFilmMaterialValue(value: unknown): value is string {
   return typeof value === "string" && value.trim() !== "" && value !== MISSING_VALUE_PLACEHOLDER;
 }
 
+/**
+ * V1.14: the two new columns' user-facing headers ("CB-Pre-PPID",
+ * "DFF-Pre-PPID") are wider than the default 90px minWidth comfortably
+ * allows without wrapping - the shipped AG Grid CSS's `.ag-header-cell-text`
+ * sets `word-break: break-word` with no `white-space: nowrap` (verified by
+ * grepping the actual shipped stylesheet, same technique as the V1.04.1
+ * zebra-striping investigation), so a header can genuinely wrap onto a
+ * second line if its column is too narrow - this isn't hypothetical.
+ * Centralized here (keyed by internal field name, not the display header,
+ * so it survives a user renaming the column via an alias) rather than
+ * scattered across the component, per spec. Existing columns are
+ * deliberately left at the default minWidth.
+ */
+export const COLUMN_MIN_WIDTH_OVERRIDES: Record<string, number> = {
+  PreProcess: 130,
+  ReferenceTestPathName: 145,
+};
+
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 type ExtraColumn = {
@@ -81,7 +99,7 @@ export default function ExcelGrid({ rows, rule, extraColumns = [], onFilmMateria
         resizable: true,
         sortable: true,
         filter: true,
-        minWidth: 90,
+        minWidth: COLUMN_MIN_WIDTH_OVERRIDES[field] ?? 90,
         comparator: (a, b) => compareValues(a, b),
         valueFormatter: (params) => (params.value === null || params.value === undefined ? "" : String(params.value)),
       };

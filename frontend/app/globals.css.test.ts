@@ -32,3 +32,22 @@ describe("globals.css - Film Material hover affordance (V1.13)", () => {
     expect(rowNumberRule).not.toMatch(/text-decoration/);
   });
 });
+
+/**
+ * V1.14: jsdom doesn't perform real CSS layout, so a column's actual
+ * rendered pixel width (and whether AG Grid's header text visually wraps)
+ * can't be measured in a component test - the shipped AG Grid stylesheet's
+ * own `.ag-header-cell-text` rule (`word-break: break-word`, no
+ * `white-space: nowrap`) is what makes wrapping possible at all (verified
+ * by grepping node_modules/ag-grid-community's actual shipped CSS), so
+ * this reads the app's own override directly from source, the same
+ * technique already used above for the Film Material hover CSS.
+ */
+describe("globals.css - header text never wraps (V1.14)", () => {
+  const css = readFileSync(join(__dirname, "globals.css"), "utf-8");
+
+  it("forces AG Grid header text to a single line", () => {
+    const rule = /\.ag-header-cell-text\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(rule).toMatch(/white-space\s*:\s*nowrap/);
+  });
+});

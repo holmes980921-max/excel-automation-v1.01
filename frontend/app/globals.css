@@ -82,6 +82,19 @@ body > div {
   justify-content: center;
 }
 
+/* V1.14: the shipped AG Grid CSS's .ag-header-cell-text sets
+ * `word-break: break-word` with no `white-space: nowrap` - verified by
+ * grepping the actual shipped stylesheet (same technique as the V1.04.1
+ * zebra-striping investigation) - so a long header genuinely can wrap onto
+ * a second line if its column is narrower than the text, which is exactly
+ * what CB-Pre-PPID/DFF-Pre-PPID (V1.14) must never do. Applied to every
+ * header, not just the two new columns - no existing header is long enough
+ * to have ever benefited from wrapping, so this is a safe, general
+ * root-cause fix rather than a per-column special case. */
+.excel-grid .ag-header-cell-text {
+  white-space: nowrap;
+}
+
 /* V1.13: subtle hover affordance for a clickable filmmaterial value -
  * communicates "this can be clicked" (a short underline + slight color
  * shift, both transitioning in smoothly) without turning the cell into a

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, waitFor } from "@testing-library/react";
-import ExcelGrid from "./ExcelGrid";
+import { render, waitFor, screen } from "@testing-library/react";
+import ExcelGrid, { COLUMN_MIN_WIDTH_OVERRIDES } from "./ExcelGrid";
 import { DEFAULT_RULE } from "@/lib/rules";
 
 function sampleRow(filmMaterial: string) {
@@ -112,5 +112,34 @@ describe("ExcelGrid - Film Material hover affordance (V1.13)", () => {
     );
     const cell = await findCell(container, "CardName");
     expect(cell.className).not.toContain("film-material-cell");
+  });
+});
+
+// V1.14: jsdom performs no real CSS layout, so the actual rendered pixel
+// width of a column (and whether its header visually wraps) can't be
+// measured here - see globals.css.test.ts for the CSS-source-level part of
+// this requirement. What's directly, deterministically verifiable is the
+// override map itself (wide enough for the full header text at this app's
+// font size) and that the grid renders the new columns' full, untruncated
+// header text without throwing.
+describe("ExcelGrid - CB-Pre-PPID/DFF-Pre-PPID column width (V1.14)", () => {
+  it("gives both new columns a wider minWidth than the 90px default, comfortably fitting their header text", () => {
+    expect(COLUMN_MIN_WIDTH_OVERRIDES.PreProcess).toBeGreaterThan(90);
+    expect(COLUMN_MIN_WIDTH_OVERRIDES.ReferenceTestPathName).toBeGreaterThan(90);
+    // "DFF-Pre-PPID" (12 chars) is one character longer than
+    // "CB-Pre-PPID" (11 chars) - its column should never be narrower.
+    expect(COLUMN_MIN_WIDTH_OVERRIDES.ReferenceTestPathName).toBeGreaterThanOrEqual(
+      COLUMN_MIN_WIDTH_OVERRIDES.PreProcess
+    );
+  });
+
+  it("does not override the width of any existing column", () => {
+    expect(Object.keys(COLUMN_MIN_WIDTH_OVERRIDES).sort()).toEqual(["PreProcess", "ReferenceTestPathName"]);
+  });
+
+  it("renders the full, untruncated CB-Pre-PPID and DFF-Pre-PPID header text", async () => {
+    render(<ExcelGrid rows={[sampleRow("-")]} rule={DEFAULT_RULE} />);
+    expect(await screen.findByRole("columnheader", { name: "CB-Pre-PPID" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "DFF-Pre-PPID" })).toBeInTheDocument();
   });
 });
